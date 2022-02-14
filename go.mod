@@ -17,6 +17,7 @@ require (
 	github.com/google/go-containerregistry v0.8.1-0.20220202214207-9c35968ef47e
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20220125170349-50dfc2733d10
 	github.com/google/go-licenses v0.0.0-20210816172045-3099c18c36e1
+	github.com/grafeas/grafeas v0.2.0
 	github.com/hashicorp/errwrap v1.1.0
 	github.com/hashicorp/go-hclog v1.1.0
 	github.com/hashicorp/go-immutable-radix v1.3.1
@@ -46,6 +47,7 @@ require (
 	go.uber.org/zap v1.21.0
 	gocloud.dev v0.24.1-0.20211119014450-028788aaaa4c
 	golang.org/x/crypto v0.0.0-20220112180741-5e0467b6c7ce
+	google.golang.org/grpc v1.44.0
 	google.golang.org/protobuf v1.27.1
 	k8s.io/api v0.22.5
 	k8s.io/apimachinery v0.22.5

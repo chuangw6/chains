@@ -14,6 +14,7 @@ limitations under the License.
 package storage
 
 import (
+	"github.com/tektoncd/chains/pkg/chains/storage/ca"
 	"github.com/tektoncd/chains/pkg/chains/storage/docdb"
 	"github.com/tektoncd/chains/pkg/chains/storage/gcs"
 	"github.com/tektoncd/chains/pkg/chains/storage/oci"
@@ -71,6 +72,12 @@ func InitializeBackends(ps versioned.Interface, kc kubernetes.Interface, logger 
 				return nil, err
 			}
 			backends[backendType] = docdbBackend
+		case ca.StorageBackendCA:
+			caBackend, err := ca.NewStorageBackend(logger, tr)
+			if err != nil {
+				return nil, err
+			}
+			backends[backendType] = caBackend
 		}
 	}
 	return backends, nil

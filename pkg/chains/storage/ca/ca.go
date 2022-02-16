@@ -95,7 +95,7 @@ func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.
 
 	// ------------------------- 2. Creating Occurrence --------------------------
 	// step3: create occurrence request
-	occurrenceReq := b.createOccurrenceRequest(projectPath, notePath, occurrencePath, rawPayload, signature)
+	occurrenceReq := b.createOccurrenceRequest(projectPath, notePath, occurrencePath, rawPayload, signature, opts)
 
 	// step4: create/store occurrence
 	_, err = b.client.CreateOccurrence(context.Background(), occurrenceReq)
@@ -209,7 +209,7 @@ func (b *Backend) createNoteRequest(projectPath string, notePath string, signatu
 	}
 }
 
-func (b *Backend) createOccurrenceRequest(projectPath string, notePath string, occurrencePath string, payload []byte, signature string) *pb.CreateOccurrenceRequest {
+func (b *Backend) createOccurrenceRequest(projectPath string, notePath string, occurrencePath string, payload []byte, signature string, opts config.StorageOpts) *pb.CreateOccurrenceRequest {
 	occurrenceDetails := &pb.Occurrence_Attestation{
 		Attestation: &attestationpb.Details{
 			Attestation: &attestationpb.Attestation{
@@ -219,8 +219,8 @@ func (b *Backend) createOccurrenceRequest(projectPath string, notePath string, o
 						SerializedPayload: payload,
 						Signatures: []*commonpb.Signature{
 							{
-								Signature: []byte(signature),
-								// TODO: Do we need to add PublicKeyId field here?
+								Signature:   []byte(signature),
+								PublicKeyId: opts.Cert,
 							},
 						},
 					},
@@ -234,10 +234,8 @@ func (b *Backend) createOccurrenceRequest(projectPath string, notePath string, o
 		PayloadType: "in-toto attestations containing a slsa.dev/provenance predicate",
 		Signatures: []*commonpb.EnvelopeSignature{
 			{
-				Sig: []byte(signature),
-				// TODO: Do we need to add Keyid field here?
-				// "Optional, unauthenticated hint indicating what key and algorithm was used to sign the message."
-				// https://github.com/secure-systems-lab/dsse/blob/master/protocol.md#signature-definition
+				Sig:   []byte(signature),
+				Keyid: opts.Cert,
 			},
 		},
 	}
@@ -250,9 +248,6 @@ func (b *Backend) createOccurrenceRequest(projectPath string, notePath string, o
 		},
 		NoteName: notePath,
 		Kind:     commonpb.NoteKind_ATTESTATION,
-		// TODO: do we want to add CreateTime, UpdateTime etc. info here?
-		// ASK: will chains actually update an occurrence frequently?
-		// if so, where does it do it?
 		Details:  occurrenceDetails,
 		Envelope: envelope,
 	}

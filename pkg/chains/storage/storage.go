@@ -73,7 +73,7 @@ func InitializeBackends(ps versioned.Interface, kc kubernetes.Interface, logger 
 			}
 			backends[backendType] = docdbBackend
 		case ca.StorageBackendCA:
-			caBackend, err := ca.NewStorageBackend(logger, tr)
+			caBackend, err := ca.NewStorageBackend(logger, tr, cfg)
 			if err != nil {
 				return nil, err
 			}

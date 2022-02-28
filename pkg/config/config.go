@@ -49,10 +49,11 @@ type Artifact struct {
 
 // StorageConfig contains the configuration to instantiate different storage providers
 type StorageConfigs struct {
-	GCS    GCSStorageConfig
-	OCI    OCIStorageConfig
-	Tekton TektonStorageConfig
-	DocDB  DocDBStorageConfig
+	GCS               GCSStorageConfig
+	OCI               OCIStorageConfig
+	Tekton            TektonStorageConfig
+	DocDB             DocDBStorageConfig
+	ContainerAnalysis CAStorageConfig
 }
 
 // SigningConfig contains the configuration to instantiate different signers
@@ -90,6 +91,11 @@ type DocDBStorageConfig struct {
 	URL string
 }
 
+type CAStorageConfig struct {
+	ProjectID string
+	NoteID    string
+}
+
 type TransparencyConfig struct {
 	Enabled          bool
 	VerifyAnnotation bool
@@ -109,6 +115,8 @@ const (
 	ociRepositoryKey         = "storage.oci.repository"
 	ociRepositoryInsecureKey = "storage.oci.repository.insecure"
 	docDBUrlKey              = "storage.docdb.url"
+	caProjectIDKey           = "storage.containeranalysis.projectid"
+	caNoteIDKey              = "storage.containeranalysis.noteid"
 	// No config needed for Tekton object storage
 
 	// No config needed for x509 signer
@@ -181,6 +189,8 @@ func NewConfigFromMap(data map[string]string) (*Config, error) {
 		asString(ociRepositoryKey, &cfg.Storage.OCI.Repository),
 		asBool(ociRepositoryInsecureKey, &cfg.Storage.OCI.Insecure),
 		asString(docDBUrlKey, &cfg.Storage.DocDB.URL),
+		asString(caProjectIDKey, &cfg.Storage.ContainerAnalysis.ProjectID),
+		asString(caNoteIDKey, &cfg.Storage.ContainerAnalysis.NoteID),
 
 		oneOf(transparencyEnabledKey, &cfg.Transparency.Enabled, "true", "manual"),
 		oneOf(transparencyEnabledKey, &cfg.Transparency.VerifyAnnotation, "manual"),

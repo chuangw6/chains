@@ -11,11 +11,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// TODO: Decide project, NoteID and OccurrenceID
-// TODO: Log more messages about storing attestation to containeranalysis
-// TODO: Add more comments
-// TODO: (design proposal) Authenticate to Google Cloud services from the code using Workload Identity.
-// TODO: Add test file
 package ca
 
 import (
@@ -26,6 +21,8 @@ import (
 	attestationpb "github.com/grafeas/grafeas/proto/v1beta1/attestation_go_proto"
 	commonpb "github.com/grafeas/grafeas/proto/v1beta1/common_go_proto"
 	pb "github.com/grafeas/grafeas/proto/v1beta1/grafeas_go_proto"
+	"github.com/pkg/errors"
+	"github.com/tektoncd/chains/pkg/chains/formats"
 	"github.com/tektoncd/chains/pkg/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"go.uber.org/zap"
@@ -38,7 +35,7 @@ const (
 	StorageBackendCA     = "containeranalysis"
 	ProjectNameFormat    = "projects/%s"
 	NoteNameFormat       = "projects/%s/notes/%s"
-	OccurrenceNameFormat = "projects/%s/occurrences/%s"
+	OccurrenceNameFormat = "projects/%s/occurrences/taskrun-%s-%s-%s"
 	PayloadNameFormat    = "taskrun-%s-%s/%s.payload"
 	SignatureNameFormat  = "taskrun-%s-%s/%s.signature"
 )
@@ -49,10 +46,12 @@ type Backend struct {
 	logger *zap.SugaredLogger
 	tr     *v1beta1.TaskRun
 	client pb.GrafeasV1Beta1Client
+	cfg    config.Config
 }
 
-func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun) (*Backend, error) {
+func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg config.Config) (*Backend, error) {
 	// ---------------- connection -----------
+	// implicit uses Application Default Credentials to authenticate.
 	// Requires `gcloud auth application-default login` to work locally
 	ctx := context.Background()
 	creds, err := oauth.NewApplicationDefault(ctx, "https://www.googleapis.com/auth/cloud-platform")
@@ -76,32 +75,32 @@ func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun) (*Backend
 		logger: logger,
 		tr:     tr,
 		client: client,
+		cfg:    cfg,
 	}, nil
 }
 
 // StorePayload implements the storage.Backend interface.
 func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.StorageOpts) error {
-	projectPath, notePath, occurrencePath := b.getConfig()
+	b.logger.Infof("Trying to store payload on TaskRun %s/%s", b.tr.Namespace, b.tr.Name)
+	// create note first
+	b.createNote()
 
-	// --------------------------- 1. Creating Note ----------------------------
-	// step1: create note request
-	noteReq := b.createNoteRequest(projectPath, notePath, signature)
+	// We only support simplesigning for OCI images, and in-toto for taskrun.
+	if opts.PayloadFormat == formats.PayloadTypeTekton {
+		return errors.New("Container Analysis storage backend only supports for OCI images and in-toto attestations")
+	}
 
-	// step2: create/store note
-	_, err := b.client.CreateNote(context.Background(), noteReq)
+	b.logger.Infof("Creating an occurrence - %s", b.getOccurrencePath(opts))
+
+	// step1: create occurrence request
+	occurrenceReq := b.createOccurrenceRequest(rawPayload, signature, opts)
+	// step2: create/store occurrence
+	_, err := b.client.CreateOccurrence(context.Background(), occurrenceReq)
 	if err != nil {
 		return err
 	}
 
-	// ------------------------- 2. Creating Occurrence --------------------------
-	// step3: create occurrence request
-	occurrenceReq := b.createOccurrenceRequest(projectPath, notePath, occurrencePath, rawPayload, signature, opts)
-
-	// step4: create/store occurrence
-	_, err = b.client.CreateOccurrence(context.Background(), occurrenceReq)
-	if err != nil {
-		return err
-	}
+	b.logger.Infof("Successfully uploaded payload for TaskRun %s/%s", b.tr.Namespace, b.tr.Name)
 
 	return nil
 }
@@ -112,7 +111,7 @@ func (b *Backend) RetrievePayloads(opts config.StorageOpts) (map[string]string, 
 	result := make(map[string]string)
 
 	// get occurrence using client
-	occurrence, err := b.getOccurrence()
+	occurrence, err := b.getOccurrence(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +131,7 @@ func (b *Backend) RetrieveSignatures(opts config.StorageOpts) (map[string][]stri
 	result := make(map[string][]string)
 
 	// get occurrence using client
-	occurrence, err := b.getOccurrence()
+	occurrence, err := b.getOccurrence(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -155,45 +154,18 @@ func (b *Backend) Type() string {
 	return StorageBackendCA
 }
 
-// ---------------------------------------------------------------------------
 // ----------------------------- Helper Functions ----------------------------
-// ---------------------------------------------------------------------------
+func (b *Backend) createNote() {
+	projectPath := b.getProjectPath()
+	noteID := b.cfg.Storage.ContainerAnalysis.NoteID
+	notePath := b.getNotePath()
 
-// Placeholder: get project ID, set note path and occurrence path
-func (b *Backend) getConfig() (string, string, string) {
-	providerProjectID := "provider_example"
-	projectPath := fmt.Sprintf(ProjectNameFormat, providerProjectID)
+	b.logger.Infof("Creating a note - %s", notePath)
 
-	noteID := "noteID_example"
-	notePath := fmt.Sprintf(NoteNameFormat, providerProjectID, noteID)
-
-	occurrenceID := "occurrenceID_example"
-	occurrencePath := fmt.Sprintf(OccurrenceNameFormat, providerProjectID, occurrenceID)
-	return projectPath, notePath, occurrencePath
-}
-
-func (b *Backend) getPayloadName(opts config.StorageOpts) string {
-	return fmt.Sprintf(PayloadNameFormat, b.tr.Namespace, b.tr.Name, opts.Key)
-}
-
-func (b *Backend) getSigName(opts config.StorageOpts) string {
-	return fmt.Sprintf(SignatureNameFormat, b.tr.Namespace, b.tr.Name, opts.Key)
-}
-
-func (b *Backend) getOccurrence() (*pb.Occurrence, error) {
-	_, _, occurrencePath := b.getConfig()
-
-	getOCCReq := &pb.GetOccurrenceRequest{
-		Name: occurrencePath,
-	}
-
-	return b.client.GetOccurrence(context.Background(), getOCCReq)
-}
-
-func (b *Backend) createNoteRequest(projectPath string, notePath string, signature string) *pb.CreateNoteRequest {
-	return &pb.CreateNoteRequest{
+	// create note request
+	noteReq := &pb.CreateNoteRequest{
 		Parent: projectPath,
-		NoteId: notePath,
+		NoteId: noteID,
 		Note: &pb.Note{
 			Name:             notePath,
 			ShortDescription: "An attestation note",
@@ -201,26 +173,35 @@ func (b *Backend) createNoteRequest(projectPath string, notePath string, signatu
 			Type: &pb.Note_AttestationAuthority{
 				AttestationAuthority: &attestationpb.Authority{
 					Hint: &attestationpb.Authority_Hint{
-						HumanReadableName: "Tekton Chains",
+						HumanReadableName: "This note was auto-generated by Tekton Chains",
 					},
 				},
 			},
 		},
 	}
+
+	// store note
+	_, err := b.client.CreateNote(context.Background(), noteReq)
+
+	if err != nil {
+		// noteID already exisits
+		b.logger.Warn(err)
+	}
 }
 
-func (b *Backend) createOccurrenceRequest(projectPath string, notePath string, occurrencePath string, payload []byte, signature string, opts config.StorageOpts) *pb.CreateOccurrenceRequest {
+func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts config.StorageOpts) *pb.CreateOccurrenceRequest {
 	occurrenceDetails := &pb.Occurrence_Attestation{
 		Attestation: &attestationpb.Details{
 			Attestation: &attestationpb.Attestation{
 				Signature: &attestationpb.Attestation_GenericSignedAttestation{
 					GenericSignedAttestation: &attestationpb.GenericSignedAttestation{
-						ContentType:       attestationpb.GenericSignedAttestation_CONTENT_TYPE_UNSPECIFIED, // TODO: correct?
+						// Uspecified ContentType because we have simplesigning for OCI, In-toto for TaskRun
+						ContentType:       attestationpb.GenericSignedAttestation_CONTENT_TYPE_UNSPECIFIED,
 						SerializedPayload: payload,
 						Signatures: []*commonpb.Signature{
 							{
 								Signature:   []byte(signature),
-								PublicKeyId: opts.Cert,
+								PublicKeyId: b.cfg.Signers.KMS.KMSRef,
 							},
 						},
 					},
@@ -235,27 +216,60 @@ func (b *Backend) createOccurrenceRequest(projectPath string, notePath string, o
 		Signatures: []*commonpb.EnvelopeSignature{
 			{
 				Sig:   []byte(signature),
-				Keyid: opts.Cert,
+				Keyid: b.cfg.Signers.KMS.KMSRef,
 			},
 		},
 	}
 
 	occurrence := &pb.Occurrence{
-		Name: projectPath,
+		Name: b.getOccurrencePath(opts),
 		Resource: &pb.Resource{
-			Name: string(b.tr.UID),
 			Uri:  "tekton://chains.tekton.dev/taskruns/" + string(b.tr.UID),
 		},
-		NoteName: notePath,
+		NoteName: b.getNotePath(),
 		Kind:     commonpb.NoteKind_ATTESTATION,
 		Details:  occurrenceDetails,
 		Envelope: envelope,
 	}
 
 	occurrenceRequest := &pb.CreateOccurrenceRequest{
-		Parent:     projectPath,
+		Parent:     b.getProjectPath(),
 		Occurrence: occurrence,
 	}
 
 	return occurrenceRequest
+}
+
+func (b *Backend) getOccurrence(opts config.StorageOpts) (*pb.Occurrence, error) {
+	occurrencePath := b.getOccurrencePath(opts)
+
+	getOCCReq := &pb.GetOccurrenceRequest{
+		Name: occurrencePath,
+	}
+
+	return b.client.GetOccurrence(context.Background(), getOCCReq)
+}
+
+func (b *Backend) getProjectPath() string {
+	projectID := b.cfg.Storage.ContainerAnalysis.ProjectID
+	return fmt.Sprintf(ProjectNameFormat, projectID)
+}
+
+func (b *Backend) getNotePath() string {
+	projectID := b.cfg.Storage.ContainerAnalysis.ProjectID
+	noteID := b.cfg.Storage.ContainerAnalysis.NoteID
+	return fmt.Sprintf(NoteNameFormat, projectID, noteID)
+}
+
+func (b *Backend) getOccurrencePath(opts config.StorageOpts) string {
+	projectID := b.cfg.Storage.ContainerAnalysis.ProjectID
+	return fmt.Sprintf(OccurrenceNameFormat, projectID, b.tr.Namespace, b.tr.Name, opts.Key)
+}
+
+func (b *Backend) getPayloadName(opts config.StorageOpts) string {
+	return fmt.Sprintf(PayloadNameFormat, b.tr.Namespace, b.tr.Name, opts.Key)
+}
+
+func (b *Backend) getSigName(opts config.StorageOpts) string {
+	return fmt.Sprintf(SignatureNameFormat, b.tr.Namespace, b.tr.Name, opts.Key)
 }

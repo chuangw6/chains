@@ -44,22 +44,7 @@ func TestBackend_StorePayload(t *testing.T) {
 				tr: &v1beta1.TaskRun{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "foo",
-						Name:      "bar",
-						UID:       types.UID("uid"),
-					},
-				},
-				signed:    []byte("signed"),
-				signature: "signature",
-				opts:      config.StorageOpts{Key: "foo.uuid", PayloadFormat: formats.PayloadTypeInTotoIte6},
-			},
-		},
-		{
-			name: "no error, simplesigning",
-			args: args{
-				tr: &v1beta1.TaskRun{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "foo",
-						Name:      "bar",
+						Name:      "bar12",
 						UID:       types.UID("uid"),
 					},
 				},
@@ -71,29 +56,35 @@ func TestBackend_StorePayload(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			logger := logtesting.TestLogger(t)
+			tr := tt.args.tr
+			cfg := config.Config{
+				Storage: config.StorageConfigs{
+					ContainerAnalysis: config.CAStorageConfig{
+						ProjectID: "chuangw-test",
+						NoteID:    "chuangw-test-note",
+					},
+				},
+			}
 
-			client, err := creatConnectionClient()
+			b, err := NewStorageBackend(logger, tr, cfg)
+
 			if err != nil {
 				t.Fatal(err)
 			}
-			b := &Backend{
-				logger: logtesting.TestLogger(t),
-				tr:     tt.args.tr,
-				client: client,
-				cfg:    config.Config{Storage: config.StorageConfigs{GCS: config.GCSStorageConfig{Bucket: "foo"}}},
-			}
+
 			if err := b.StorePayload(tt.args.signed, tt.args.signature, tt.args.opts); (err != nil) != tt.wantErr {
 				t.Errorf("Backend.StorePayload() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
 			objectSig := b.getSigName(tt.args.opts)
 			objectPayload := b.getPayloadName(tt.args.opts)
-			got, err := b.RetrieveSignatures(tt.args.opts)
+			got_signature, err := b.RetrieveSignatures(tt.args.opts)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got[objectSig][0] != tt.args.signature {
-				t.Errorf("wrong signature, expected %q, got %q", tt.args.signature, got[objectSig][0])
+			if got_signature[objectSig][0] != tt.args.signature {
+				t.Errorf("wrong signature, expected %q, got %q", tt.args.signature, got_signature[objectSig][0])
 			}
 			var got_payload map[string]string
 			got_payload, err = b.RetrievePayloads(tt.args.opts)
@@ -101,7 +92,7 @@ func TestBackend_StorePayload(t *testing.T) {
 				t.Fatal(err)
 			}
 			if got_payload[objectPayload] != string(tt.args.signed) {
-				t.Errorf("wrong signature, expected %s, got %s", tt.args.signed, got_payload[objectPayload])
+				t.Errorf("wrong payload, expected %s, got %s", tt.args.signed, got_payload[objectPayload])
 			}
 		})
 	}

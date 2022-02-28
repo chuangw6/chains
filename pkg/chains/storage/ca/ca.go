@@ -43,27 +43,14 @@ const (
 // Backend is a storage backend that stores signed payloads in the TaskRun metadata as an annotation.
 // It is stored as base64 encoded JSON.
 type Backend struct {
-	logger *zap.SugaredLogger
-	tr     *v1beta1.TaskRun
-	client pb.GrafeasV1Beta1Client
-	cfg    config.Config
+	logger  *zap.SugaredLogger
+	tr      *v1beta1.TaskRun
+	client  pb.GrafeasV1Beta1Client
+	cfg     config.Config
+	occName string
 }
 
 func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg config.Config) (*Backend, error) {
-	client, err := creatConnectionClient()
-	if err != nil {
-		return nil, err
-	}
-
-	return &Backend{
-		logger: logger,
-		tr:     tr,
-		client: client,
-		cfg:    cfg,
-	}, nil
-}
-
-func creatConnectionClient() (pb.GrafeasV1Beta1Client, error) {
 	// ---------------- connection -----------
 	// implicit uses Application Default Credentials to authenticate.
 	// Requires `gcloud auth application-default login` to work locally
@@ -80,11 +67,17 @@ func creatConnectionClient() (pb.GrafeasV1Beta1Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	// defer conn.Close()
 
 	// -------------- create backend instance -------------
 	client := pb.NewGrafeasV1Beta1Client(conn)
-	return client, nil
+
+	return &Backend{
+		logger: logger,
+		tr:     tr,
+		client: client,
+		cfg:    cfg,
+	}, nil
 }
 
 // StorePayload implements the storage.Backend interface.
@@ -103,13 +96,14 @@ func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.
 	// step1: create occurrence request
 	occurrenceReq := b.createOccurrenceRequest(rawPayload, signature, opts)
 	// step2: create/store occurrence
-	_, err := b.client.CreateOccurrence(context.Background(), occurrenceReq)
+	occurrence, err := b.client.CreateOccurrence(context.Background(), occurrenceReq)
 	if err != nil {
 		return err
 	}
 
-	b.logger.Infof("Successfully uploaded payload for TaskRun %s/%s", b.tr.Namespace, b.tr.Name)
+	b.occName = occurrence.GetName()
 
+	b.logger.Infof("Successfully created an occurrence %s (Occurrence_ID is automatically generated) for Taskrun %s/%s", b.occName, b.tr.Namespace, b.tr.Name)
 	return nil
 }
 
@@ -125,7 +119,7 @@ func (b *Backend) RetrievePayloads(opts config.StorageOpts) (map[string]string, 
 	}
 
 	// get "Payload" field from the occurrence DSSE envelop
-	payload := occurrence.GetEnvelope().GetPayload()
+	payload := occurrence.GetAttestation().GetAttestation().GetGenericSignedAttestation().GetSerializedPayload()
 	// give the payload a name
 	payloadName := b.getPayloadName(opts)
 
@@ -145,11 +139,12 @@ func (b *Backend) RetrieveSignatures(opts config.StorageOpts) (map[string][]stri
 	}
 
 	// get "Signatures" field from the occurrence DSSE envelop
-	signatures := occurrence.GetEnvelope().GetSignatures()
+	// signatures := occurrence.GetEnvelope().GetSignatures()
+	signatures := occurrence.GetAttestation().GetAttestation().GetGenericSignedAttestation().Signatures
 	// unmarshal signatures
 	unmarshalSigs := []string{}
 	for _, sig := range signatures {
-		unmarshalSigs = append(unmarshalSigs, string(sig.GetSig()))
+		unmarshalSigs = append(unmarshalSigs, string(sig.GetSignature()))
 	}
 	// give the Signature a name
 	signaturesName := b.getSigName(opts)
@@ -255,10 +250,8 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 }
 
 func (b *Backend) getOccurrence(opts config.StorageOpts) (*pb.Occurrence, error) {
-	occurrencePath := b.getOccurrencePath(opts)
-
 	getOCCReq := &pb.GetOccurrenceRequest{
-		Name: occurrencePath,
+		Name: b.occName,
 	}
 
 	return b.client.GetOccurrence(context.Background(), getOCCReq)

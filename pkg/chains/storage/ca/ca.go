@@ -91,8 +91,6 @@ func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.
 		return errors.New("Container Analysis storage backend only supports for OCI images and in-toto attestations")
 	}
 
-	b.logger.Infof("Creating an occurrence - %s", b.getOccurrencePath(opts))
-
 	// step1: create occurrence request
 	occurrenceReq := b.createOccurrenceRequest(rawPayload, signature, opts)
 	// step2: create/store occurrence
@@ -225,7 +223,6 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 	}
 
 	occurrence := &pb.Occurrence{
-		Name: b.getOccurrencePath(opts),
 		Resource: &pb.Resource{
 			// namespace-scoped resource
 			// https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-uris
@@ -236,7 +233,6 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 				b.tr.Name),
 		},
 		NoteName: b.getNotePath(),
-		Kind:     commonpb.NoteKind_ATTESTATION,
 		Details:  occurrenceDetails,
 		Envelope: envelope,
 	}

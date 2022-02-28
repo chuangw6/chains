@@ -44,7 +44,7 @@ func TestBackend_StorePayload(t *testing.T) {
 				tr: &v1beta1.TaskRun{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "foo",
-						Name:      "bar12",
+						Name:      "bar",
 						UID:       types.UID("uid"),
 					},
 				},

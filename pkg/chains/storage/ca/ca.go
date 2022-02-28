@@ -35,7 +35,6 @@ const (
 	StorageBackendCA     = "containeranalysis"
 	ProjectNameFormat    = "projects/%s"
 	NoteNameFormat       = "projects/%s/notes/%s"
-	OccurrenceNameFormat = "projects/%s/occurrences/taskrun-%s-%s-%s"
 	PayloadNameFormat    = "taskrun-%s-%s/%s.payload"
 	SignatureNameFormat  = "taskrun-%s-%s/%s.signature"
 )

@@ -224,7 +224,13 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 	occurrence := &pb.Occurrence{
 		Name: b.getOccurrencePath(opts),
 		Resource: &pb.Resource{
-			Uri:  "tekton://chains.tekton.dev/taskruns/" + string(b.tr.UID),
+			// namespace-scoped resource
+			// https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-uris
+			Uri: fmt.Sprintf("/apis/%s/namespaces/%s/%s/%s",
+				b.tr.GroupVersionKind().GroupVersion().String(),
+				b.tr.Namespace,
+				b.tr.Kind,
+				b.tr.Name),
 		},
 		NoteName: b.getNotePath(),
 		Kind:     commonpb.NoteKind_ATTESTATION,

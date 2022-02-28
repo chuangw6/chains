@@ -50,6 +50,20 @@ type Backend struct {
 }
 
 func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg config.Config) (*Backend, error) {
+	client, err := creatConnectionClient()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Backend{
+		logger: logger,
+		tr:     tr,
+		client: client,
+		cfg:    cfg,
+	}, nil
+}
+
+func creatConnectionClient() (pb.GrafeasV1Beta1Client, error) {
 	// ---------------- connection -----------
 	// implicit uses Application Default Credentials to authenticate.
 	// Requires `gcloud auth application-default login` to work locally
@@ -70,13 +84,7 @@ func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg confi
 
 	// -------------- create backend instance -------------
 	client := pb.NewGrafeasV1Beta1Client(conn)
-
-	return &Backend{
-		logger: logger,
-		tr:     tr,
-		client: client,
-		cfg:    cfg,
-	}, nil
+	return client, nil
 }
 
 // StorePayload implements the storage.Backend interface.

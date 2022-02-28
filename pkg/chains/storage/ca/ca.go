@@ -32,24 +32,30 @@ import (
 )
 
 const (
-	StorageBackendCA     = "containeranalysis"
-	ProjectNameFormat    = "projects/%s"
-	NoteNameFormat       = "projects/%s/notes/%s"
-	PayloadNameFormat    = "taskrun-%s-%s/%s.payload"
-	SignatureNameFormat  = "taskrun-%s-%s/%s.signature"
+	StorageBackendCA    = "containeranalysis"
+	ProjectNameFormat   = "projects/%s"
+	NoteNameFormat      = "projects/%s/notes/%s"
+	PayloadNameFormat   = "taskrun-%s-%s/%s.payload"
+	SignatureNameFormat = "taskrun-%s-%s/%s.signature"
 )
 
 // Backend is a storage backend that stores signed payloads in the TaskRun metadata as an annotation.
 // It is stored as base64 encoded JSON.
 type Backend struct {
-	logger  *zap.SugaredLogger
-	tr      *v1beta1.TaskRun
-	client  pb.GrafeasV1Beta1Client
-	cfg     config.Config
-	occName string
+	logger      *zap.SugaredLogger
+	tr          *v1beta1.TaskRun
+	client      pb.GrafeasV1Beta1Client
+	cfg         config.Config
+	projectPath string
+	notePath    string
+	occName     string
 }
 
 func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg config.Config) (*Backend, error) {
+	projectID := cfg.Storage.ContainerAnalysis.ProjectID
+	noteID := cfg.Storage.ContainerAnalysis.NoteID
+	projectPath := fmt.Sprintf(ProjectNameFormat, projectID)
+	notePath := fmt.Sprintf(NoteNameFormat, projectID, noteID)
 	// ---------------- connection -----------
 	// implicit uses Application Default Credentials to authenticate.
 	// Requires `gcloud auth application-default login` to work locally
@@ -68,22 +74,30 @@ func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg confi
 	}
 	// defer conn.Close()
 
-	// -------------- create backend instance -------------
+	// connection client
 	client := pb.NewGrafeasV1Beta1Client(conn)
 
+	// create note
+	err = createNote(logger, client, projectPath, noteID, notePath)
+
+	if err != nil {
+		// ignore note already exisits error
+		logger.Info(err)
+	}
+
 	return &Backend{
-		logger: logger,
-		tr:     tr,
-		client: client,
-		cfg:    cfg,
+		logger:      logger,
+		tr:          tr,
+		client:      client,
+		cfg:         cfg,
+		projectPath: projectPath,
+		notePath:    notePath,
 	}, nil
 }
 
 // StorePayload implements the storage.Backend interface.
 func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.StorageOpts) error {
 	b.logger.Infof("Trying to store payload on TaskRun %s/%s", b.tr.Namespace, b.tr.Name)
-	// create note first
-	b.createNote()
 
 	// We only support simplesigning for OCI images, and in-toto for taskrun.
 	if opts.PayloadFormat == formats.PayloadTypeTekton {
@@ -155,12 +169,9 @@ func (b *Backend) Type() string {
 }
 
 // ----------------------------- Helper Functions ----------------------------
-func (b *Backend) createNote() {
-	projectPath := b.getProjectPath()
-	noteID := b.cfg.Storage.ContainerAnalysis.NoteID
-	notePath := b.getNotePath()
+func createNote(logger *zap.SugaredLogger, client pb.GrafeasV1Beta1Client, projectPath string, noteID string, notePath string) error {
 
-	b.logger.Infof("Creating a note - %s", notePath)
+	logger.Infof("Creating a note - %s", notePath)
 
 	// create note request
 	noteReq := &pb.CreateNoteRequest{
@@ -181,12 +192,13 @@ func (b *Backend) createNote() {
 	}
 
 	// store note
-	_, err := b.client.CreateNote(context.Background(), noteReq)
+	_, err := client.CreateNote(context.Background(), noteReq)
 
 	if err != nil {
 		// noteID already exisits
-		b.logger.Warn(err)
+		return err
 	}
+	return nil
 }
 
 func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts config.StorageOpts) *pb.CreateOccurrenceRequest {
@@ -225,19 +237,21 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 		Resource: &pb.Resource{
 			// namespace-scoped resource
 			// https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-uris
-			Uri: fmt.Sprintf("/apis/%s/namespaces/%s/%s/%s",
+			Uri: fmt.Sprintf("/apis/%s/namespaces/%s/%s/%s/%s",
 				b.tr.GroupVersionKind().GroupVersion().String(),
 				b.tr.Namespace,
 				b.tr.Kind,
-				b.tr.Name),
+				b.tr.Name,
+				opts.PayloadFormat,
+			),
 		},
-		NoteName: b.getNotePath(),
+		NoteName: b.notePath,
 		Details:  occurrenceDetails,
 		Envelope: envelope,
 	}
 
 	occurrenceRequest := &pb.CreateOccurrenceRequest{
-		Parent:     b.getProjectPath(),
+		Parent:     b.projectPath,
 		Occurrence: occurrence,
 	}
 
@@ -250,17 +264,6 @@ func (b *Backend) getOccurrence(opts config.StorageOpts) (*pb.Occurrence, error)
 	}
 
 	return b.client.GetOccurrence(context.Background(), getOCCReq)
-}
-
-func (b *Backend) getProjectPath() string {
-	projectID := b.cfg.Storage.ContainerAnalysis.ProjectID
-	return fmt.Sprintf(ProjectNameFormat, projectID)
-}
-
-func (b *Backend) getNotePath() string {
-	projectID := b.cfg.Storage.ContainerAnalysis.ProjectID
-	noteID := b.cfg.Storage.ContainerAnalysis.NoteID
-	return fmt.Sprintf(NoteNameFormat, projectID, noteID)
 }
 
 func (b *Backend) getPayloadName(opts config.StorageOpts) string {

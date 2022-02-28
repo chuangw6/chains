@@ -264,11 +264,6 @@ func (b *Backend) getNotePath() string {
 	return fmt.Sprintf(NoteNameFormat, projectID, noteID)
 }
 
-func (b *Backend) getOccurrencePath(opts config.StorageOpts) string {
-	projectID := b.cfg.Storage.ContainerAnalysis.ProjectID
-	return fmt.Sprintf(OccurrenceNameFormat, projectID, b.tr.Namespace, b.tr.Name, opts.Key)
-}
-
 func (b *Backend) getPayloadName(opts config.StorageOpts) string {
 	return fmt.Sprintf(PayloadNameFormat, b.tr.Namespace, b.tr.Name, opts.Key)
 }

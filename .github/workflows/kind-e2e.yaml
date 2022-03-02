@@ -1,0 +1,211 @@
+name: Chains kind E2E Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+
+defaults:
+  run:
+    shell: bash
+    working-directory: ./
+
+jobs:
+  chains-e2e-tests:
+    name: e2e tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # Keep running if one leg fails.
+      matrix:
+        k8s-version:
+        - v1.21.x
+
+    env:
+      KNATIVE_VERSION: "1.1.0"
+      GOPATH: ${{ github.workspace }}
+      GO111MODULE: on
+      GOFLAGS: -ldflags=-s -ldflags=-w
+      KO_DOCKER_REPO: registry.local:5000/knative
+      KOCACHE: ~/ko
+      SIGSTORE_SCAFFOLDING_RELEASE_VERSION: "v0.1.19"
+      TEKTON_PIPELINES_RELEASE: "https://storage.googleapis.com/tekton-releases-nightly/pipeline/latest/release.yaml"
+
+    steps:
+    - name: Configure DockerHub mirror
+      working-directory: ./
+      run: |
+        tmp=$(mktemp)
+        jq '."registry-mirrors" = ["https://mirror.gcr.io"]' /etc/docker/daemon.json > "$tmp"
+        sudo mv "$tmp" /etc/docker/daemon.json
+        sudo service docker restart
+
+
+    # https://github.com/mvdan/github-actions-golang#how-do-i-set-up-caching-between-builds
+    - uses: actions/cache@v2
+      with:
+        # In order:
+        # * Module download cache
+        # * Build cache (Linux)
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+          ${{ env.KOCACHE }}
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.17.x
+
+    - uses: imjasonh/setup-ko@v0.4
+      with:
+        version: tip
+
+    - name: Install tkn cli
+      run: |
+        curl -Lo ./tkn_0.22.0_Linux_x86_64.tar.gz https://github.com/tektoncd/cli/releases/download/v0.22.0/tkn_0.22.0_Linux_x86_64.tar.gz
+        tar xvzf ./tkn_0.22.0_Linux_x86_64.tar.gz tkn
+        chmod u+x ./tkn
+
+    - name: Check out our repo
+      uses: actions/checkout@v2
+      with:
+        path: ./src/github.com/tektoncd/chains
+
+    - name: Setup Cluster
+      run: |
+        curl -Lo ./setup-kind.sh https://github.com/vaikas/sigstore-scaffolding/releases/download/${{ env.SIGSTORE_SCAFFOLDING_RELEASE_VERSION }}/setup-kind.sh
+        chmod u+x ./setup-kind.sh
+        ./setup-kind.sh \
+          --registry-url $(echo ${KO_DOCKER_REPO} | cut -d'/' -f 1) \
+          --cluster-suffix cluster.local \
+          --k8s-version ${{ matrix.k8s-version }} \
+          --knative-version ${KNATIVE_VERSION}
+
+    - name: Install sigstore pieces
+      timeout-minutes: 10
+      run: |
+        curl -L https://github.com/vaikas/sigstore-scaffolding/releases/download/${{ env.SIGSTORE_SCAFFOLDING_RELEASE_VERSION }}/release.yaml | kubectl apply -f -
+
+        # Wait for all the ksvc to be up.
+        kubectl wait --timeout 10m -A --for=condition=Ready ksvc --all
+
+    - name: Run sigstore tests to make sure all is well
+      run: |
+        # Grab the secret from the ctlog-system namespace and make a copy
+        # in our namespace so we can get access to the CT Log public key
+        # so we can verify the SCT coming from there.
+        kubectl -n ctlog-system get secrets ctlog-public-key -oyaml | sed 's/namespace: .*/namespace: default/' | kubectl apply -f -
+
+        curl -L https://github.com/vaikas/sigstore-scaffolding/releases/download/${{ env.SIGSTORE_SCAFFOLDING_RELEASE_VERSION }}/testrelease.yaml | kubectl create -f -
+
+        kubectl wait --for=condition=Complete --timeout=90s job/check-oidc
+        kubectl wait --for=condition=Complete --timeout=90s job/checktree
+
+    - name: Install Tekton pipelines
+      run: |
+        while ! kubectl apply --filename ${{ env.TEKTON_PIPELINES_RELEASE }}
+        do
+          echo "waiting for tekton pipelines to get installed"
+          sleep 2
+        done
+
+        # Restart so picks up the changes.
+        kubectl -n tekton-pipelines delete po -l app=tekton-pipelines-controller
+
+    - name: Install all the everythings
+      working-directory: ./src/github.com/tektoncd/chains
+      timeout-minutes: 10
+      run: |
+        ko apply -BRf ./config/
+
+        kubectl patch configmap/chains-config \
+        --namespace tekton-chains \
+        --type merge \
+        --patch '{"data":{"artifacts.oci.format": "simplesigning", "artifacts.oci.storage": "oci", "artifacts.taskrun.format": "in-toto", "signers.x509.fulcio.address": "http://fulcio.fulcio-system.svc", "signers.x509.fulcio.enabled": "true", "transparency.enabled": "true", "transparency.url": "http://rekor.rekor-system.svc"}}'
+
+        # Restart chains controller so picks up the changes.
+        kubectl -n tekton-chains delete po -l app=tekton-chains-controller
+
+        # TODO(vaikas): Better way to find when the chains has picked up
+        # the changes
+        sleep 10
+
+    - name: Run tutorial taskrun
+      run: |
+        kubectl create -f https://raw.githubusercontent.com/tektoncd/chains/main/examples/taskruns/task-output-image.yaml
+
+        # Sleep so the taskrun shows up.
+        sleep 2
+
+        echo "Waiting for the taskrun to complete..."
+        kubectl wait --timeout 3m --for=condition=Succeeded taskruns --all
+
+        echo "Waiting for Chains to do it's thing"
+        for i in {1..10}
+        do
+          ./tkn tr describe --last -o jsonpath="{.metadata.annotations.chains\.tekton\.dev/transparency}" > tektonentry
+
+          if [ -s ./tektonentry ]; then
+            if grep --quiet rekor.rekor-system.svc ./tektonentry ; then
+              echo "Found rekor transparency entry:"
+              cat ./tektonentry
+              kubectl get taskruns -oyaml
+              exit 0
+            else
+              echo "Did not find expected rekor transparency entry"
+              sleep 2
+            fi
+          else
+            echo "Did not find rekor transparency entry in the annotations"
+            sleep 2
+          fi
+        done
+
+        # Did not find entry, fail
+        exit 1
+
+    - name: Collect taskrun diagnostics
+      if: ${{ failure() }}
+      run: |
+        for x in $(kubectl get taskruns -oname); do
+          echo "::group:: describe $x"
+          ./tkn tr describe $x
+          echo '::endgroup::'
+        done
+
+    - name: Collect node diagnostics
+      if: ${{ failure() }}
+      run: |
+        for x in $(kubectl get nodes -oname); do
+          echo "::group:: describe $x"
+          kubectl describe $x
+          echo '::endgroup::'
+        done
+
+    - name: Collect pod diagnostics
+      if: ${{ failure() }}
+      run: |
+        for ns in default tekton-chains tekton-pipelines fulcio-system rekor-system trillian-system ctlog-system; do
+          kubectl get pods -n${ns}
+
+          for x in $(kubectl get pods -n${ns} -oname); do
+            echo "::group:: describe $x"
+            kubectl describe -n${ns} $x
+            echo '::endgroup::'
+          done
+        done
+
+    - name: Collect logs
+      if: ${{ failure() }}
+      run: |
+        mkdir -p /tmp/logs
+        kind export logs /tmp/logs
+
+    - name: Upload artifacts
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: logs
+        path: /tmp/logs

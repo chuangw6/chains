@@ -49,7 +49,7 @@ type Backend struct {
 	tr             *v1beta1.TaskRun
 	client         pb.GrafeasV1Beta1Client
 	cfg            config.Config
-	occurrenceRefs []string
+	occurrenceRefs []string // store occurrence IDs that are automatically generated during the time of creation
 }
 
 func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg config.Config) (*Backend, error) {

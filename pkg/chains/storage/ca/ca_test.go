@@ -77,22 +77,21 @@ func TestBackend_StorePayload(t *testing.T) {
 				t.Errorf("Backend.StorePayload() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			objectSig := b.getSigName(tt.args.opts)
-			objectPayload := b.getPayloadName(tt.args.opts)
+			objectIdentifier := b.RetrieveResourceURI(tt.args.opts)
 			got_signature, err := b.RetrieveSignatures(tt.args.opts)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got_signature[objectSig][0] != tt.args.signature {
-				t.Errorf("wrong signature, expected %q, got %q", tt.args.signature, got_signature[objectSig][0])
+			if got_signature[objectIdentifier][0] != tt.args.signature {
+				t.Errorf("wrong signature, expected %q, got %q", tt.args.signature, got_signature[objectIdentifier][0])
 			}
 			var got_payload map[string]string
 			got_payload, err = b.RetrievePayloads(tt.args.opts)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got_payload[objectPayload] != string(tt.args.signed) {
-				t.Errorf("wrong payload, expected %s, got %s", tt.args.signed, got_payload[objectPayload])
+			if got_payload[objectIdentifier] != string(tt.args.signed) {
+				t.Errorf("wrong payload, expected %s, got %s", tt.args.signed, got_payload[objectIdentifier])
 			}
 		})
 	}

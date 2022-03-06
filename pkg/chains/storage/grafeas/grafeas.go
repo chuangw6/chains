@@ -64,8 +64,8 @@ func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg confi
 	if err != nil {
 		return nil, err
 	}
-	server := cfg.Storage.Grafeas.Server
-	conn, err := grpc.Dial(server,
+
+	conn, err := grpc.Dial(cfg.Storage.Grafeas.Server,
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
 		grpc.WithDefaultCallOptions(grpc.PerRPCCredentials(creds)),
 	)
@@ -157,7 +157,7 @@ func (b *Backend) RetrieveSignatures(opts config.StorageOpts) (map[string][]stri
 		name := occ.GetResource().GetUri()
 		// get "Signatures" field from the occurrence DSSE envelop
 		// signatures := occurrence.GetEnvelope().GetSignatures()
-		signatures := occ.GetAttestation().GetAttestation().GetGenericSignedAttestation().Signatures
+		signatures := occ.GetAttestation().GetAttestation().GetGenericSignedAttestation().GetSignatures()
 		// unmarshal signatures
 		unmarshalSigs := []string{}
 		for _, sig := range signatures {
@@ -216,7 +216,7 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 						Signatures: []*commonpb.Signature{
 							{
 								Signature:   []byte(signature),
-								PublicKeyId: b.cfg.Signers.KMS.KMSRef,
+								PublicKeyId: b.cfg.Signers.KMS.KMSRef, // TODO: currently we only support storing kms keyID, will add other keys' ids later i.e. k8s secret, fulcio
 							},
 						},
 					},
@@ -231,7 +231,7 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 		Signatures: []*commonpb.EnvelopeSignature{
 			{
 				Sig:   []byte(signature),
-				Keyid: b.cfg.Signers.KMS.KMSRef,
+				Keyid: b.cfg.Signers.KMS.KMSRef, // TODO: currently we only support storing kms keyID, will add other keys' ids later i.e. k8s secret, fulcio
 			},
 		},
 	}

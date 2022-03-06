@@ -162,6 +162,7 @@ func defaultConfig() *Config {
 		},
 		Storage: StorageConfigs{
 			Grafeas: GrafeasConfig{
+				NoteID: "tekton-chains",
 				Server: "dns:///containeranalysis.googleapis.com",
 			},
 		},

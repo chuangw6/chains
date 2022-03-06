@@ -88,13 +88,12 @@ func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg confi
 
 // StorePayload implements the storage.Backend interface.
 func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.StorageOpts) error {
-	b.logger.Infof("Trying to store payload on TaskRun %s/%s", b.tr.Namespace, b.tr.Name)
-
 	// We only support simplesigning for OCI images, and in-toto for taskrun.
 	if opts.PayloadFormat == formats.PayloadTypeTekton || opts.PayloadFormat == formats.PayloadTypeProvenance {
 		return errors.New("Container Analysis storage backend only supports for OCI images and in-toto attestations")
 	}
 
+	b.logger.Infof("Trying to store payload on TaskRun %s/%s", b.tr.Namespace, b.tr.Name)
 	ctx := context.Background()
 
 	// step1: create note

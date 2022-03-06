@@ -71,7 +71,6 @@ func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg confi
 	if err != nil {
 		return nil, err
 	}
-	// defer conn.Close()
 
 	// connection client
 	client := pb.NewGrafeasV1Beta1Client(conn)
@@ -266,6 +265,7 @@ func (b *Backend) getNotePath() string {
 	return fmt.Sprintf(NoteNameFormat, projectID, noteID)
 }
 
+// decide the attestation content type based on its format (simplesigning or in-toto)
 func (b *Backend) getContentType(opts config.StorageOpts) attestationpb.GenericSignedAttestation_ContentType {
 	// for simplesigning
 	if opts.PayloadFormat == formats.PayloadTypeSimpleSigning {
@@ -276,6 +276,7 @@ func (b *Backend) getContentType(opts config.StorageOpts) attestationpb.GenericS
 	return attestationpb.GenericSignedAttestation_CONTENT_TYPE_UNSPECIFIED
 }
 
+// retrieve all occurrences using the list of auto-generated occurrence names that were stored previously
 func (b *Backend) getOccurrences() ([]*pb.Occurrence, error) {
 	result := []*pb.Occurrence{}
 
@@ -316,27 +317,25 @@ func addTypeInformationToObject(obj runtime.Object) error {
 	return nil
 }
 
+// compose resource URI based on the type of attestation (oci or taskrun)
 func (b *Backend) RetrieveResourceURI(opts config.StorageOpts) string {
-	var resourceURI string
-
 	if opts.PayloadFormat == formats.PayloadTypeSimpleSigning {
 		// for oci artifact
-		resourceURI = b.RetrieveOCIURI(opts)
-	} else {
-		// for taskrun artifact
-
-		// add TypeMeta information to taskrun objects
-		addTypeInformationToObject(b.tr)
-
-		resourceURI = fmt.Sprintf("/apis/%s/namespaces/%s/%s/%s@%s",
-			b.tr.GroupVersionKind().GroupVersion().String(),
-			b.tr.Namespace,
-			b.tr.Kind,
-			b.tr.Name,
-			string(b.tr.UID),
-		)
+		return b.RetrieveOCIURI(opts)
 	}
-	return resourceURI
+
+	// for taskrun artifact
+
+	// add TypeMeta information to taskrun objects
+	addTypeInformationToObject(b.tr)
+
+	return fmt.Sprintf("/apis/%s/namespaces/%s/%s/%s@%s",
+		b.tr.GroupVersionKind().GroupVersion().String(),
+		b.tr.Namespace,
+		b.tr.Kind,
+		b.tr.Name,
+		string(b.tr.UID),
+	)
 }
 
 // Given the TaskRun, retrieve the OCI image's URL.

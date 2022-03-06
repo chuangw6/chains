@@ -240,7 +240,7 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 		Resource: &pb.Resource{
 			// namespace-scoped resource
 			// https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-uris
-			Uri: b.RetrieveResourceURI(opts),
+			Uri: b.retrieveResourceURI(opts),
 		},
 		NoteName: b.getNotePath(),
 		Details:  occurrenceDetails,
@@ -319,10 +319,10 @@ func addTypeInformationToObject(obj runtime.Object) error {
 }
 
 // compose resource URI based on the type of attestation (oci or taskrun)
-func (b *Backend) RetrieveResourceURI(opts config.StorageOpts) string {
+func (b *Backend) retrieveResourceURI(opts config.StorageOpts) string {
 	if opts.PayloadFormat == formats.PayloadTypeSimpleSigning {
 		// for oci artifact
-		return b.RetrieveOCIURI(opts)
+		return b.retrieveOCIURI(opts)
 	}
 
 	// for taskrun artifact
@@ -340,7 +340,7 @@ func (b *Backend) RetrieveResourceURI(opts config.StorageOpts) string {
 }
 
 // Given the TaskRun, retrieve the OCI image's URL.
-func (b *Backend) RetrieveOCIURI(opts config.StorageOpts) string {
+func (b *Backend) retrieveOCIURI(opts config.StorageOpts) string {
 	images := artifacts.ExtractOCIImagesFromResults(b.tr, b.logger)
 
 	for _, image := range images {

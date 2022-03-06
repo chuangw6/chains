@@ -77,7 +77,7 @@ func TestBackend_StorePayload(t *testing.T) {
 				t.Errorf("Backend.StorePayload() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			objectIdentifier := b.RetrieveResourceURI(tt.args.opts)
+			objectIdentifier := b.retrieveResourceURI(tt.args.opts)
 			got_signature, err := b.RetrieveSignatures(tt.args.opts)
 			if err != nil {
 				t.Fatal(err)

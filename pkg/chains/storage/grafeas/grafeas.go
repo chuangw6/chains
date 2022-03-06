@@ -30,8 +30,10 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
+	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 )
@@ -75,23 +77,13 @@ func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg confi
 	client := pb.NewGrafeasV1Beta1Client(conn)
 
 	// create backend instance
-	b := &Backend{
+	return &Backend{
 		logger:         logger,
 		tr:             tr,
 		client:         client,
 		cfg:            cfg,
 		occurrenceRefs: []string{},
-	}
-
-	// create note
-	err = b.createNote()
-
-	if err != nil {
-		// ignore note already exisits error
-		logger.Info(err)
-	}
-
-	return b, nil
+	}, nil
 }
 
 // StorePayload implements the storage.Backend interface.
@@ -103,9 +95,15 @@ func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.
 		return errors.New("Container Analysis storage backend only supports for OCI images and in-toto attestations")
 	}
 
-	// step1: create occurrence request
+	// step1: create note
+	if err := b.createNote(); status.Code(err) != codes.AlreadyExists {
+		return err
+	}
+
+	// step2: create occurrence request
 	occurrenceReq := b.createOccurrenceRequest(rawPayload, signature, opts)
-	// step2: create/store occurrence
+
+	// step3: create/store occurrence
 	occurrence, err := b.client.CreateOccurrence(context.Background(), occurrenceReq)
 	if err != nil {
 		return err
@@ -199,12 +197,10 @@ func (b *Backend) createNote() error {
 	}
 
 	// store note
-	_, err := b.client.CreateNote(context.Background(), noteReq)
-
-	if err != nil {
-		// noteID already exisits
+	if _, err := b.client.CreateNote(context.Background(), noteReq); err != nil {
 		return err
 	}
+
 	return nil
 }
 

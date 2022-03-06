@@ -53,9 +53,6 @@ type Backend struct {
 }
 
 func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg config.Config) (*Backend, error) {
-	// add TypeMeta information to taskrun objects
-	addTypeInformationToObject(tr)
-
 	// build connection through grpc
 	// implicit uses Application Default Credentials to authenticate.
 	// Requires `gcloud auth application-default login` to work locally
@@ -179,7 +176,7 @@ func (b *Backend) Type() string {
 
 // ----------------------------- Helper Functions ----------------------------
 func (b *Backend) createNote() error {
-	noteID := b.cfg.Storage.ContainerAnalysis.NoteID
+	noteID := b.cfg.Storage.Grafeas.NoteID
 
 	b.logger.Infof("Creating a note with note name %s", noteID)
 
@@ -321,6 +318,10 @@ func (b *Backend) RetrieveResourceURI(opts config.StorageOpts) string {
 		resourceURI = b.RetrieveOCIURI(opts)
 	} else {
 		// for taskrun artifact
+
+		// add TypeMeta information to taskrun objects
+		addTypeInformationToObject(b.tr)
+
 		resourceURI = fmt.Sprintf("/apis/%s/namespaces/%s/%s/%s@%s",
 			b.tr.GroupVersionKind().GroupVersion().String(),
 			b.tr.Namespace,

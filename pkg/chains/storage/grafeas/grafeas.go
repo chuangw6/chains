@@ -211,8 +211,7 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 			Attestation: &attestationpb.Attestation{
 				Signature: &attestationpb.Attestation_GenericSignedAttestation{
 					GenericSignedAttestation: &attestationpb.GenericSignedAttestation{
-						// Uspecified ContentType because we have simplesigning for OCI, In-toto for TaskRun
-						ContentType:       b.getContentType(),
+						ContentType:       b.getContentType(opts),
 						SerializedPayload: payload,
 						Signatures: []*commonpb.Signature{
 							{

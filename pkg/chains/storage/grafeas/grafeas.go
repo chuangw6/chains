@@ -61,8 +61,8 @@ func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg confi
 	if err != nil {
 		return nil, err
 	}
-
-	conn, err := grpc.Dial("dns:///containeranalysis.googleapis.com",
+	server := cfg.Storage.Grafeas.Server
+	conn, err := grpc.Dial(server,
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
 		grpc.WithDefaultCallOptions(grpc.PerRPCCredentials(creds)),
 	)

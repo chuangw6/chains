@@ -94,6 +94,7 @@ type DocDBStorageConfig struct {
 type GrafeasConfig struct {
 	ProjectID string
 	NoteID    string
+	Server    string
 }
 
 type TransparencyConfig struct {
@@ -117,6 +118,7 @@ const (
 	docDBUrlKey              = "storage.docdb.url"
 	grafeasProjectIDKey      = "storage.grafeas.projectid"
 	grafeasNoteIDKey         = "storage.grafeas.noteid"
+	grafeasServer            = "storage.grafeas.server"
 	// No config needed for Tekton object storage
 
 	// No config needed for x509 signer
@@ -158,6 +160,11 @@ func defaultConfig() *Config {
 		Transparency: TransparencyConfig{
 			URL: "https://rekor.sigstore.dev",
 		},
+		Storage: StorageConfigs{
+			Grafeas: GrafeasConfig{
+				Server: "dns:///containeranalysis.googleapis.com",
+			},
+		},
 		Signers: SignerConfigs{
 			X509: X509Signer{
 				FulcioAddr: "https://fulcio.sigstore.dev",
@@ -191,6 +198,7 @@ func NewConfigFromMap(data map[string]string) (*Config, error) {
 		asString(docDBUrlKey, &cfg.Storage.DocDB.URL),
 		asString(grafeasProjectIDKey, &cfg.Storage.Grafeas.ProjectID),
 		asString(grafeasNoteIDKey, &cfg.Storage.Grafeas.NoteID),
+		asString(grafeasServer, &cfg.Storage.Grafeas.Server),
 
 		oneOf(transparencyEnabledKey, &cfg.Transparency.Enabled, "true", "manual"),
 		oneOf(transparencyEnabledKey, &cfg.Transparency.VerifyAnnotation, "manual"),

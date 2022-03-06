@@ -54,6 +54,7 @@ type Backend struct {
 	occurrenceRefs []string // store occurrence IDs that are automatically generated during the time of creation
 }
 
+// NewStorageBackend returns a new Grafeas StorageBackend that stores signatures in a Grafeas server
 func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg config.Config) (*Backend, error) {
 	// build connection through grpc
 	// implicit uses Application Default Credentials to authenticate.

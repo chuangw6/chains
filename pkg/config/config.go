@@ -53,7 +53,7 @@ type StorageConfigs struct {
 	OCI               OCIStorageConfig
 	Tekton            TektonStorageConfig
 	DocDB             DocDBStorageConfig
-	ContainerAnalysis CAStorageConfig
+	Grafeas GrafeasConfig
 }
 
 // SigningConfig contains the configuration to instantiate different signers
@@ -91,7 +91,7 @@ type DocDBStorageConfig struct {
 	URL string
 }
 
-type CAStorageConfig struct {
+type GrafeasConfig struct {
 	ProjectID string
 	NoteID    string
 }
@@ -115,8 +115,8 @@ const (
 	ociRepositoryKey         = "storage.oci.repository"
 	ociRepositoryInsecureKey = "storage.oci.repository.insecure"
 	docDBUrlKey              = "storage.docdb.url"
-	caProjectIDKey           = "storage.containeranalysis.projectid"
-	caNoteIDKey              = "storage.containeranalysis.noteid"
+	grafeasProjectIDKey           = "storage.grafeas.projectid"
+	grafeasNoteIDKey              = "storage.grafeas.noteid"
 	// No config needed for Tekton object storage
 
 	// No config needed for x509 signer
@@ -177,11 +177,11 @@ func NewConfigFromMap(data map[string]string) (*Config, error) {
 		// Artifact-specific configs
 		// TaskRuns
 		asString(taskrunFormatKey, &cfg.Artifacts.TaskRuns.Format, "tekton", "in-toto", "tekton-provenance"),
-		asStringSet(taskrunStorageKey, &cfg.Artifacts.TaskRuns.StorageBackend, sets.NewString("tekton", "oci", "gcs", "docdb", "containeranalysis")),
+		asStringSet(taskrunStorageKey, &cfg.Artifacts.TaskRuns.StorageBackend, sets.NewString("tekton", "oci", "gcs", "docdb", "grafeas")),
 		asString(taskrunSignerKey, &cfg.Artifacts.TaskRuns.Signer, "x509", "kms"),
 		// OCI
 		asString(ociFormatKey, &cfg.Artifacts.OCI.Format, "simplesigning"),
-		asStringSet(ociStorageKey, &cfg.Artifacts.OCI.StorageBackend, sets.NewString("tekton", "oci", "gcs", "docdb", "containeranalysis")),
+		asStringSet(ociStorageKey, &cfg.Artifacts.OCI.StorageBackend, sets.NewString("tekton", "oci", "gcs", "docdb", "grafeas")),
 		asString(ociSignerKey, &cfg.Artifacts.OCI.Signer, "x509", "kms"),
 
 		// Storage level configs
@@ -189,8 +189,8 @@ func NewConfigFromMap(data map[string]string) (*Config, error) {
 		asString(ociRepositoryKey, &cfg.Storage.OCI.Repository),
 		asBool(ociRepositoryInsecureKey, &cfg.Storage.OCI.Insecure),
 		asString(docDBUrlKey, &cfg.Storage.DocDB.URL),
-		asString(caProjectIDKey, &cfg.Storage.ContainerAnalysis.ProjectID),
-		asString(caNoteIDKey, &cfg.Storage.ContainerAnalysis.NoteID),
+		asString(grafeasProjectIDKey, &cfg.Storage.Grafeas.ProjectID),
+		asString(grafeasNoteIDKey, &cfg.Storage.Grafeas.NoteID),
 
 		oneOf(transparencyEnabledKey, &cfg.Transparency.Enabled, "true", "manual"),
 		oneOf(transparencyEnabledKey, &cfg.Transparency.VerifyAnnotation, "manual"),

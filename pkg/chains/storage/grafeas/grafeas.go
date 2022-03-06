@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ca
+package grafeas
 
 import (
 	"context"
@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	StorageBackendCA  = "containeranalysis"
+	StorageBackendGrafeas  = "grafeas"
 	ProjectNameFormat = "projects/%s"
 	NoteNameFormat    = "projects/%s/notes/%s"
 )
@@ -174,7 +174,7 @@ func (b *Backend) RetrieveSignatures(opts config.StorageOpts) (map[string][]stri
 }
 
 func (b *Backend) Type() string {
-	return StorageBackendCA
+	return StorageBackendGrafeas
 }
 
 // ----------------------------- Helper Functions ----------------------------

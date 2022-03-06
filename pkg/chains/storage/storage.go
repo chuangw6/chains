@@ -14,9 +14,9 @@ limitations under the License.
 package storage
 
 import (
-	"github.com/tektoncd/chains/pkg/chains/storage/ca"
 	"github.com/tektoncd/chains/pkg/chains/storage/docdb"
 	"github.com/tektoncd/chains/pkg/chains/storage/gcs"
+	"github.com/tektoncd/chains/pkg/chains/storage/grafeas"
 	"github.com/tektoncd/chains/pkg/chains/storage/oci"
 	"github.com/tektoncd/chains/pkg/chains/storage/tekton"
 	"github.com/tektoncd/chains/pkg/config"
@@ -72,8 +72,8 @@ func InitializeBackends(ps versioned.Interface, kc kubernetes.Interface, logger 
 				return nil, err
 			}
 			backends[backendType] = docdbBackend
-		case ca.StorageBackendCA:
-			caBackend, err := ca.NewStorageBackend(logger, tr, cfg)
+		case grafeas.StorageBackendGrafeas:
+			caBackend, err := grafeas.NewStorageBackend(logger, tr, cfg)
 			if err != nil {
 				return nil, err
 			}

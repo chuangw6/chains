@@ -95,8 +95,10 @@ func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.
 		return errors.New("Container Analysis storage backend only supports for OCI images and in-toto attestations")
 	}
 
+	ctx := context.Background()
+
 	// step1: create note
-	if err := b.createNote(); status.Code(err) != codes.AlreadyExists {
+	if err := b.createNote(ctx); status.Code(err) != codes.AlreadyExists {
 		return err
 	}
 
@@ -104,7 +106,7 @@ func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.
 	occurrenceReq := b.createOccurrenceRequest(rawPayload, signature, opts)
 
 	// step3: create/store occurrence
-	occurrence, err := b.client.CreateOccurrence(context.Background(), occurrenceReq)
+	occurrence, err := b.client.CreateOccurrence(ctx, occurrenceReq)
 	if err != nil {
 		return err
 	}
@@ -173,7 +175,7 @@ func (b *Backend) Type() string {
 }
 
 // ----------------------------- Helper Functions ----------------------------
-func (b *Backend) createNote() error {
+func (b *Backend) createNote(ctx context.Context) error {
 	noteID := b.cfg.Storage.Grafeas.NoteID
 
 	b.logger.Infof("Creating a note with note name %s", noteID)
@@ -183,7 +185,6 @@ func (b *Backend) createNote() error {
 		Parent: b.getProjectPath(),
 		NoteId: noteID,
 		Note: &pb.Note{
-			// Name:             b.getNotePath(),
 			ShortDescription: "An attestation note",
 			Kind:             commonpb.NoteKind_ATTESTATION,
 			Type: &pb.Note_AttestationAuthority{
@@ -197,7 +198,7 @@ func (b *Backend) createNote() error {
 	}
 
 	// store note
-	if _, err := b.client.CreateNote(context.Background(), noteReq); err != nil {
+	if _, err := b.client.CreateNote(ctx, noteReq); err != nil {
 		return err
 	}
 
@@ -211,7 +212,7 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 				Signature: &attestationpb.Attestation_GenericSignedAttestation{
 					GenericSignedAttestation: &attestationpb.GenericSignedAttestation{
 						// Uspecified ContentType because we have simplesigning for OCI, In-toto for TaskRun
-						ContentType:       attestationpb.GenericSignedAttestation_CONTENT_TYPE_UNSPECIFIED,
+						ContentType:       b.getContentType(),
 						SerializedPayload: payload,
 						Signatures: []*commonpb.Signature{
 							{
@@ -264,6 +265,16 @@ func (b *Backend) getNotePath() string {
 	projectID := b.cfg.Storage.Grafeas.ProjectID
 	noteID := b.cfg.Storage.Grafeas.NoteID
 	return fmt.Sprintf(NoteNameFormat, projectID, noteID)
+}
+
+func (b *Backend) getContentType(opts config.StorageOpts) attestationpb.GenericSignedAttestation_ContentType {
+	// for simplesigning
+	if opts.PayloadFormat == formats.PayloadTypeSimpleSigning {
+		return attestationpb.GenericSignedAttestation_SIMPLE_SIGNING_JSON
+	}
+
+	// for in-toto
+	return attestationpb.GenericSignedAttestation_CONTENT_TYPE_UNSPECIFIED
 }
 
 func (b *Backend) getOccurrences() ([]*pb.Occurrence, error) {

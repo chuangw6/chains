@@ -49,10 +49,10 @@ type Artifact struct {
 
 // StorageConfig contains the configuration to instantiate different storage providers
 type StorageConfigs struct {
-	GCS               GCSStorageConfig
-	OCI               OCIStorageConfig
-	Tekton            TektonStorageConfig
-	DocDB             DocDBStorageConfig
+	GCS     GCSStorageConfig
+	OCI     OCIStorageConfig
+	Tekton  TektonStorageConfig
+	DocDB   DocDBStorageConfig
 	Grafeas GrafeasConfig
 }
 
@@ -115,8 +115,8 @@ const (
 	ociRepositoryKey         = "storage.oci.repository"
 	ociRepositoryInsecureKey = "storage.oci.repository.insecure"
 	docDBUrlKey              = "storage.docdb.url"
-	grafeasProjectIDKey           = "storage.grafeas.projectid"
-	grafeasNoteIDKey              = "storage.grafeas.noteid"
+	grafeasProjectIDKey      = "storage.grafeas.projectid"
+	grafeasNoteIDKey         = "storage.grafeas.noteid"
 	// No config needed for Tekton object storage
 
 	// No config needed for x509 signer

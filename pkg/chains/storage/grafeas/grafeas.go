@@ -37,9 +37,9 @@ import (
 )
 
 const (
-	StorageBackendGrafeas  = "grafeas"
-	ProjectNameFormat = "projects/%s"
-	NoteNameFormat    = "projects/%s/notes/%s"
+	StorageBackendGrafeas = "grafeas"
+	ProjectNameFormat     = "projects/%s"
+	NoteNameFormat        = "projects/%s/notes/%s"
 )
 
 // Backend is a storage backend that stores signed payloads in the TaskRun metadata as an annotation.
@@ -263,13 +263,13 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 }
 
 func (b *Backend) getProjectPath() string {
-	projectID := b.cfg.Storage.ContainerAnalysis.ProjectID
+	projectID := b.cfg.Storage.Grafeas.ProjectID
 	return fmt.Sprintf(ProjectNameFormat, projectID)
 }
 
 func (b *Backend) getNotePath() string {
-	projectID := b.cfg.Storage.ContainerAnalysis.ProjectID
-	noteID := b.cfg.Storage.ContainerAnalysis.NoteID
+	projectID := b.cfg.Storage.Grafeas.ProjectID
+	noteID := b.cfg.Storage.Grafeas.NoteID
 	return fmt.Sprintf(NoteNameFormat, projectID, noteID)
 }
 

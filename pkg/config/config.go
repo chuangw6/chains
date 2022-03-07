@@ -160,12 +160,12 @@ func defaultConfig() *Config {
 		Transparency: TransparencyConfig{
 			URL: "https://rekor.sigstore.dev",
 		},
-		Storage: StorageConfigs{
-			Grafeas: GrafeasConfig{
-				NoteID: "tekton-chains",
-				Server: "dns:///containeranalysis.googleapis.com",
-			},
-		},
+		// Storage: StorageConfigs{
+		// 	Grafeas: GrafeasConfig{
+		// 		NoteID: "tekton-chains",
+		// 		Server: "dns:///containeranalysis.googleapis.com",
+		// 	},
+		// },
 		Signers: SignerConfigs{
 			X509: X509Signer{
 				FulcioAddr: "https://fulcio.sigstore.dev",

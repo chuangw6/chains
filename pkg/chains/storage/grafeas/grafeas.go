@@ -97,7 +97,7 @@ func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.
 	ctx := context.Background()
 
 	// step1: create note
-	if err := b.createNote(ctx); status.Code(err) != codes.AlreadyExists {
+	if err := b.createNote(ctx); err != nil && status.Code(err) != codes.AlreadyExists {
 		return err
 	}
 

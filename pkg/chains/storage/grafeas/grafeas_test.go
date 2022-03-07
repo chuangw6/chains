@@ -25,21 +25,57 @@ import (
 	logtesting "knative.dev/pkg/logging/testing"
 )
 
-func TestBackend_StorePayload(t *testing.T) {
+type args struct {
+	tr           *v1beta1.TaskRun
+	trPayload    []byte
+	trSignature  string
+	trOpts       config.StorageOpts
+	ociPayload   []byte
+	ociSignature string
+	ociOpts      config.StorageOpts
+}
 
-	type args struct {
-		tr        *v1beta1.TaskRun
-		signed    []byte
-		signature string
-		opts      config.StorageOpts
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
+type testConfig struct {
+	name    string
+	args    args
+	wantErr bool
+}
+
+func TestBackend_StorePayload(t *testing.T) {
+	tests := []testConfig{
+		// test 1
 		{
-			name: "no error, intoto",
+			name: "no error, simplesining and intoto",
+			args: args{
+				tr: &v1beta1.TaskRun{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "foo",
+						Name:      "bar",
+						UID:       types.UID("uid"),
+					},
+					Status: v1beta1.TaskRunStatus{
+						TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+							TaskRunResults: []v1beta1.TaskRunResult{
+								{Name: "IMAGE_DIGEST", Value: "sha256:cfx4f0bf41c80609214f9b8ec0408b1afb28b3ced343b944aaa05d47caba3e00"},
+								{Name: "IMAGE_URL", Value: "gcr.io/test/kaniko-chains1"},
+								{Name: "IMAGE_DIGEST", Value: "sha256:xxx4f0bf41c80609214f9b8ec0408b1afb28b3ced343b944aaa05d47caba3e00"},
+								{Name: "IMAGE_URL", Value: "gcr.io/test/kaniko-chains2"},
+							},
+						},
+					},
+				},
+				trPayload:    []byte("taskrun payload"),
+				trSignature:  "taskrun signature",
+				trOpts:       config.StorageOpts{Key: "taskrun.uuid", PayloadFormat: formats.PayloadTypeInTotoIte6},
+				ociPayload:   []byte("oci payload"),
+				ociSignature: "oci signature",
+				ociOpts:      config.StorageOpts{Key: "oci.uuid", PayloadFormat: formats.PayloadTypeSimpleSigning},
+			},
+			wantErr: false,
+		},
+		// test 2
+		{
+			name: "error, tekton format",
 			args: args{
 				tr: &v1beta1.TaskRun{
 					ObjectMeta: metav1.ObjectMeta{
@@ -48,51 +84,62 @@ func TestBackend_StorePayload(t *testing.T) {
 						UID:       types.UID("uid"),
 					},
 				},
-				signed:    []byte("signed"),
-				signature: "signature",
-				opts:      config.StorageOpts{Key: "foo.uuid", PayloadFormat: formats.PayloadTypeSimpleSigning},
+				trOpts: config.StorageOpts{Key: "taskrun.uuid", PayloadFormat: formats.PayloadTypeTekton},
 			},
+			wantErr: true,
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			logger := logtesting.TestLogger(t)
-			tr := tt.args.tr
-			cfg := config.Config{
-				Storage: config.StorageConfigs{
-					Grafeas: config.GrafeasConfig{
-						ProjectID: "chuangw-test",
-						NoteID:    "chuangw-test-note",
-					},
-				},
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+
+			backend := Backend{
+				logger: logtesting.TestLogger(t),
+				tr:     test.args.tr,
+				client: , // TODO
+				// cfg : config.Config{
+				// 	Storage: config.StorageConfigs{
+				// 		Grafeas: config.GrafeasConfig{
+				// 			ProjectID: "test-project",
+				// 			NoteID:    "test-note",
+				// 			Server: "test-server",
+				// 		},
+				// 	},
+				// },
 			}
 
-			b, err := NewStorageBackend(logger, tr, cfg)
-
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if err := b.StorePayload(tt.args.signed, tt.args.signature, tt.args.opts); (err != nil) != tt.wantErr {
-				t.Errorf("Backend.StorePayload() error = %v, wantErr %v", err, tt.wantErr)
-			}
-
-			objectIdentifier := b.retrieveResourceURI(tt.args.opts)
-			got_signature, err := b.RetrieveSignatures(tt.args.opts)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got_signature[objectIdentifier][0] != tt.args.signature {
-				t.Errorf("wrong signature, expected %q, got %q", tt.args.signature, got_signature[objectIdentifier][0])
-			}
-			var got_payload map[string]string
-			got_payload, err = b.RetrievePayloads(tt.args.opts)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got_payload[objectIdentifier] != string(tt.args.signed) {
-				t.Errorf("wrong payload, expected %s, got %s", tt.args.signed, got_payload[objectIdentifier])
-			}
+			// test taskrun
+			testInterface(t, &test, &backend, test.args.trPayload, test.args.trSignature, test.args.trOpts)
+			// test oci
+			testInterface(t, &test, &backend, test.args.ociPayload, test.args.ociSignature, test.args.ociOpts)
 		})
+	}
+}
+
+func testInterface(t *testing.T, test *testConfig, backend *Backend, payload []byte, signature string, opts config.StorageOpts) {
+	if err := backend.StorePayload(payload, signature, opts); (err != nil) != test.wantErr {
+		t.Errorf("Backend.StorePayload() error = %v, wantErr %v", err, test.wantErr)
+	}
+
+	// get uri
+	objectIdentifier := backend.retrieveResourceURI(opts)
+
+	// check signature
+	got_signature, err := backend.RetrieveSignatures(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got_signature[objectIdentifier][0] != signature {
+		t.Errorf("wrong signature, expected %q, got %q", signature, got_signature[objectIdentifier][0])
+	}
+
+	// check payload
+	var got_payload map[string]string
+	got_payload, err = backend.RetrievePayloads(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got_payload[objectIdentifier] != string(payload) {
+		t.Errorf("wrong payload, expected %s, got %s", payload, got_payload[objectIdentifier])
 	}
 }

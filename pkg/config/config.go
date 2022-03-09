@@ -92,9 +92,12 @@ type DocDBStorageConfig struct {
 }
 
 type GrafeasConfig struct {
+	// project id that is used to store notes and occurences
 	ProjectID string
-	NoteID    string
-	Server    string
+	// note id used to create a note that an occurrence will be attached to
+	NoteID string
+	// grafeas storage backend server address
+	Server string
 }
 
 type TransparencyConfig struct {

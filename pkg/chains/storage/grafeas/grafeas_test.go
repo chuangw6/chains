@@ -139,7 +139,7 @@ func TestBackend_StorePayload(t *testing.T) {
 }
 
 // test attestation storage and retrieval
-func testInterface(ctx context.Context,t *testing.T, test testConfig, backend Backend, payload []byte, signature string, opts config.StorageOpts) {
+func testInterface(ctx context.Context, t *testing.T, test testConfig, backend Backend, payload []byte, signature string, opts config.StorageOpts) {
 	if err := backend.StorePayload(ctx, payload, signature, opts); (err != nil) != test.wantErr {
 		t.Errorf("Backend.StorePayload() error = %v, wantErr %v", err, test.wantErr)
 	}

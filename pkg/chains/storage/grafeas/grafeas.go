@@ -44,8 +44,8 @@ const (
 	NoteNameFormat        = "projects/%s/notes/%s"
 )
 
-// Backend is a storage backend that stores signed payloads in the TaskRun metadata as an annotation.
-// It is stored as base64 encoded JSON.
+// Backend is a storage backend that stores signed payloads in the storage that
+// is built on the top of grafeas i.e. container analysis.
 type Backend struct {
 	logger         *zap.SugaredLogger
 	tr             *v1beta1.TaskRun

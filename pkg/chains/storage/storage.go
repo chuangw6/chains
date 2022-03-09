@@ -75,11 +75,11 @@ func InitializeBackends(ctx context.Context, ps versioned.Interface, kc kubernet
 			}
 			backends[backendType] = docdbBackend
 		case grafeas.StorageBackendGrafeas:
-			caBackend, err := grafeas.NewStorageBackend(logger, tr, cfg)
+			grafeasBackend, err := grafeas.NewStorageBackend(ctx, logger, tr, cfg)
 			if err != nil {
 				return nil, err
 			}
-			backends[backendType] = caBackend
+			backends[backendType] = grafeasBackend
 		}
 	}
 	return backends, nil

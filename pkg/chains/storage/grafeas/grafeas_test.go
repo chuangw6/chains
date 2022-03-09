@@ -119,16 +119,18 @@ func TestBackend_StorePayload(t *testing.T) {
 				},
 			}
 
+			ctx := context.Background()
+
 			// test if the attestation of the **taskrun** artifact can be successfully stored into grafeas server
 			// and test if payloads and signatures inside the attestation can be retrieved.
-			testInterface(t, test, backend, test.args.trPayload, test.args.trSignature, test.args.trOpts)
+			testInterface(ctx, t, test, backend, test.args.trPayload, test.args.trSignature, test.args.trOpts)
 
 			// test if the attestation of the **oci** artifact can be successfully stored into grafeas server
 			// and test if payloads and signatures inside the attestation can be retrieved.
-			testInterface(t, test, backend, test.args.ociPayload, test.args.ociSignature, test.args.ociOpts)
+			testInterface(ctx, t, test, backend, test.args.ociPayload, test.args.ociSignature, test.args.ociOpts)
 
 			// test if all occurrences generated from `StorePayload` are what we expect.
-			testListOccurrences(t, backend)
+			testListOccurrences(ctx, t, backend)
 		})
 	}
 
@@ -137,8 +139,8 @@ func TestBackend_StorePayload(t *testing.T) {
 }
 
 // test attestation storage and retrieval
-func testInterface(t *testing.T, test testConfig, backend Backend, payload []byte, signature string, opts config.StorageOpts) {
-	if err := backend.StorePayload(payload, signature, opts); (err != nil) != test.wantErr {
+func testInterface(ctx context.Context,t *testing.T, test testConfig, backend Backend, payload []byte, signature string, opts config.StorageOpts) {
+	if err := backend.StorePayload(ctx, payload, signature, opts); (err != nil) != test.wantErr {
 		t.Errorf("Backend.StorePayload() error = %v, wantErr %v", err, test.wantErr)
 	}
 
@@ -147,7 +149,7 @@ func testInterface(t *testing.T, test testConfig, backend Backend, payload []byt
 
 	// check signature
 	expect_signature := map[string][]string{objectIdentifier: []string{signature}}
-	got_signature, err := backend.RetrieveSignatures(opts)
+	got_signature, err := backend.RetrieveSignatures(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +161,7 @@ func testInterface(t *testing.T, test testConfig, backend Backend, payload []byt
 	// check payload
 	expect_payload := map[string]string{objectIdentifier: string(payload)}
 	var got_payload map[string]string
-	got_payload, err = backend.RetrievePayloads(opts)
+	got_payload, err = backend.RetrievePayloads(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +172,7 @@ func testInterface(t *testing.T, test testConfig, backend Backend, payload []byt
 }
 
 // test occurrences are generated correctly
-func testListOccurrences(t *testing.T, b Backend) {
+func testListOccurrences(ctx context.Context, t *testing.T, b Backend) {
 	wanted := &pb.ListOccurrencesResponse{
 		Occurrences: []*pb.Occurrence{
 			// occurrence for taskrun
@@ -248,7 +250,7 @@ func testListOccurrences(t *testing.T, b Backend) {
 			},
 		},
 	}
-	got, err := b.client.ListOccurrences(context.Background(),
+	got, err := b.client.ListOccurrences(ctx,
 		&pb.ListOccurrencesRequest{
 			// This is just a placeholder.
 			// ProjectID doesn't matter here because we assume there is only one project in the mocked server.

@@ -55,11 +55,10 @@ type Backend struct {
 }
 
 // NewStorageBackend returns a new Grafeas StorageBackend that stores signatures in a Grafeas server
-func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg config.Config) (*Backend, error) {
+func NewStorageBackend(ctx context.Context, logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg config.Config) (*Backend, error) {
 	// build connection through grpc
 	// implicit uses Application Default Credentials to authenticate.
 	// Requires `gcloud auth application-default login` to work locally
-	ctx := context.Background()
 	creds, err := oauth.NewApplicationDefault(ctx, "https://www.googleapis.com/auth/cloud-platform")
 	if err != nil {
 		return nil, err
@@ -87,14 +86,13 @@ func NewStorageBackend(logger *zap.SugaredLogger, tr *v1beta1.TaskRun, cfg confi
 }
 
 // StorePayload implements the storage.Backend interface.
-func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.StorageOpts) error {
+func (b *Backend) StorePayload(ctx context.Context, rawPayload []byte, signature string, opts config.StorageOpts) error {
 	// We only support simplesigning for OCI images, and in-toto for taskrun.
 	if opts.PayloadFormat == formats.PayloadTypeTekton || opts.PayloadFormat == formats.PayloadTypeProvenance {
 		return errors.New("Container Analysis storage backend only supports for OCI images and in-toto attestations")
 	}
 
 	b.logger.Infof("Trying to store payload on TaskRun %s/%s", b.tr.Namespace, b.tr.Name)
-	ctx := context.Background()
 
 	// step1: create note
 	if err := b.createNote(ctx); err != nil && status.Code(err) != codes.AlreadyExists {
@@ -118,12 +116,12 @@ func (b *Backend) StorePayload(rawPayload []byte, signature string, opts config.
 }
 
 // Retrieve payloads from container analysis and store it in a map
-func (b *Backend) RetrievePayloads(opts config.StorageOpts) (map[string]string, error) {
+func (b *Backend) RetrievePayloads(ctx context.Context, opts config.StorageOpts) (map[string]string, error) {
 	// initialize an empty map for result
 	result := make(map[string]string)
 
 	// get all occurrences created using this backend
-	occurrences, err := b.getOccurrences()
+	occurrences, err := b.getOccurrences(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -141,12 +139,12 @@ func (b *Backend) RetrievePayloads(opts config.StorageOpts) (map[string]string, 
 }
 
 // Retrieve signatures from container analysis and store it in a map
-func (b *Backend) RetrieveSignatures(opts config.StorageOpts) (map[string][]string, error) {
+func (b *Backend) RetrieveSignatures(ctx context.Context, opts config.StorageOpts) (map[string][]string, error) {
 	// initialize an empty map for result
 	result := make(map[string][]string)
 
 	// get all occurrences created using this backend
-	occurrences, err := b.getOccurrences()
+	occurrences, err := b.getOccurrences(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -277,14 +275,14 @@ func (b *Backend) getContentType(opts config.StorageOpts) attestationpb.GenericS
 }
 
 // retrieve all occurrences using the list of auto-generated occurrence names that were stored previously
-func (b *Backend) getOccurrences() ([]*pb.Occurrence, error) {
+func (b *Backend) getOccurrences(ctx context.Context) ([]*pb.Occurrence, error) {
 	result := []*pb.Occurrence{}
 
 	for _, occName := range b.occurrenceRefs {
 		getOCCReq := &pb.GetOccurrenceRequest{
 			Name: occName,
 		}
-		occ, error := b.client.GetOccurrence(context.Background(), getOCCReq)
+		occ, error := b.client.GetOccurrence(ctx, getOCCReq)
 		if error != nil {
 			return nil, error
 		}

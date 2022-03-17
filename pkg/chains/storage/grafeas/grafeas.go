@@ -40,8 +40,8 @@ import (
 
 const (
 	StorageBackendGrafeas = "grafeas"
-	ProjectNameFormat     = "projects/%s"
-	NoteNameFormat        = "projects/%s/notes/%s"
+	projectNameFormat     = "projects/%s"
+	noteNameFormat        = "projects/%s/notes/%s"
 )
 
 // Backend is a storage backend that stores signed payloads in the storage that
@@ -254,13 +254,13 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 
 func (b *Backend) getProjectPath() string {
 	projectID := b.cfg.Storage.Grafeas.ProjectID
-	return fmt.Sprintf(ProjectNameFormat, projectID)
+	return fmt.Sprintf(projectNameFormat, projectID)
 }
 
 func (b *Backend) getNotePath() string {
 	projectID := b.cfg.Storage.Grafeas.ProjectID
 	noteID := b.cfg.Storage.Grafeas.NoteID
-	return fmt.Sprintf(NoteNameFormat, projectID, noteID)
+	return fmt.Sprintf(noteNameFormat, projectID, noteID)
 }
 
 // decide the attestation content type based on its format (simplesigning or in-toto)

@@ -97,15 +97,14 @@ func TestBackend_StorePayload(t *testing.T) {
 	}
 
 	conn, client, err := setupConnection()
+	if err != nil {
+		t.Fatal("Failed to create grafeas client.")
+	}
+
 	defer conn.Close()
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-
-			if err != nil {
-				t.Error(err)
-			}
-
 			backend := Backend{
 				logger: logtesting.TestLogger(t),
 				tr:     test.args.tr,
@@ -139,7 +138,7 @@ func TestBackend_StorePayload(t *testing.T) {
 // test attestation storage and retrieval
 func testInterface(ctx context.Context, t *testing.T, test testConfig, backend Backend, payload []byte, signature string, opts config.StorageOpts) {
 	if err := backend.StorePayload(ctx, payload, signature, opts); (err != nil) != test.wantErr {
-		t.Errorf("Backend.StorePayload() error = %v, wantErr %v", err, test.wantErr)
+		t.Fatal("Backend.StorePayload() failed. error:", err, "wantErr:", test.wantErr)
 	}
 
 	// get uri
@@ -149,7 +148,7 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 	expect_signature := map[string][]string{objectIdentifier: []string{signature}}
 	got_signature, err := backend.RetrieveSignatures(ctx, opts)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("Backend.RetrieveSignatures() failed. error:", err)
 	}
 
 	if !cmp.Equal(got_signature, expect_signature) {
@@ -161,7 +160,7 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 	var got_payload map[string]string
 	got_payload, err = backend.RetrievePayloads(ctx, opts)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("RetrievePayloads.RetrievePayloads() failed. error:", err)
 	}
 
 	if !cmp.Equal(got_payload, expect_payload) {
@@ -256,7 +255,7 @@ func testListOccurrences(ctx context.Context, t *testing.T, b Backend) {
 		},
 	)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("Failed to create ListOccurrences. error ", err)
 	}
 
 	// set compare option to ignore all unexported fields of ListOccurrencesResponse struct

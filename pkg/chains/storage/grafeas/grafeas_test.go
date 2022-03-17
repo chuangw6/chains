@@ -100,9 +100,23 @@ func TestBackend_StorePayload(t *testing.T) {
 				payload:   []byte("oci payload"),
 				signature: "oci signature",
 				// the Key field must be the same as the first 12 chars of the image digest
-				opts:      config.StorageOpts{Key: "cfe4f0bf41c8", PayloadFormat: formats.PayloadTypeSimpleSigning},
+				opts: config.StorageOpts{Key: "cfe4f0bf41c8", PayloadFormat: formats.PayloadTypeSimpleSigning},
 			},
 			wantErr: false,
+		},
+		{
+			name: "TEST 3: tekton format for taskrun, error",
+			args: args{
+				tr: &v1beta1.TaskRun{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "foo3",
+						Name:      "bar3",
+						UID:       types.UID("uid3"),
+					},
+				},
+				opts: config.StorageOpts{Key: "taskrun2.uuid", PayloadFormat: formats.PayloadTypeTekton},
+			},
+			wantErr: true,
 		},
 	}
 
@@ -156,7 +170,7 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 		t.Fatal("Backend.RetrieveSignatures() failed. error:", err)
 	}
 
-	if !cmp.Equal(got_signature, expect_signature) {
+	if !cmp.Equal(got_signature, expect_signature) && !test.wantErr {
 		t.Errorf("Wrong signature object received, got=%s", cmp.Diff(got_signature, expect_signature))
 	}
 
@@ -168,7 +182,7 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 		t.Fatal("RetrievePayloads.RetrievePayloads() failed. error:", err)
 	}
 
-	if !cmp.Equal(got_payload, expect_payload) {
+	if !cmp.Equal(got_payload, expect_payload) && !test.wantErr {
 		t.Errorf("Wrong payload object received, got=%s", cmp.Diff(got_payload, expect_payload))
 	}
 }

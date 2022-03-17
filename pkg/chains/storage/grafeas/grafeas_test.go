@@ -97,6 +97,7 @@ func TestBackend_StorePayload(t *testing.T) {
 	}
 
 	conn, client, err := setupConnection()
+	defer conn.Close()
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -133,9 +134,6 @@ func TestBackend_StorePayload(t *testing.T) {
 			testListOccurrences(ctx, t, backend)
 		})
 	}
-
-	// close connection
-	conn.Close()
 }
 
 // test attestation storage and retrieval

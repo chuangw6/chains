@@ -34,8 +34,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
 	"google.golang.org/grpc/status"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes/scheme"
 )
 
 const (
@@ -292,29 +290,6 @@ func (b *Backend) getOccurrences(ctx context.Context) ([]*pb.Occurrence, error) 
 	return result, nil
 }
 
-// addTypeInformationToObject adds TypeMeta information to a runtime.Object based upon the loaded scheme.Scheme
-// inspired by: https://github.com/kubernetes/cli-runtime/blob/v0.19.2/pkg/printers/typesetter.go#L41
-// Souce: https://github.com/kubernetes/client-go/issues/308#issuecomment-700099260
-func addTypeInformationToObject(obj runtime.Object) error {
-	gvks, _, err := scheme.Scheme.ObjectKinds(obj)
-	if err != nil {
-		return fmt.Errorf("missing apiVersion or kind and cannot assign it; %w", err)
-	}
-
-	for _, gvk := range gvks {
-		if len(gvk.Kind) == 0 {
-			continue
-		}
-		if len(gvk.Version) == 0 || gvk.Version == runtime.APIVersionInternal {
-			continue
-		}
-		obj.GetObjectKind().SetGroupVersionKind(gvk)
-		break
-	}
-
-	return nil
-}
-
 // compose resource URI based on the type of attestation (oci or taskrun)
 func (b *Backend) retrieveResourceURI(opts config.StorageOpts) string {
 	if opts.PayloadFormat == formats.PayloadTypeSimpleSigning {
@@ -323,14 +298,10 @@ func (b *Backend) retrieveResourceURI(opts config.StorageOpts) string {
 	}
 
 	// for taskrun artifact
-
-	// add TypeMeta information to taskrun objects
-	addTypeInformationToObject(b.tr)
-
 	return fmt.Sprintf("/apis/%s/namespaces/%s/%s/%s@%s",
-		b.tr.GroupVersionKind().GroupVersion().String(),
+		b.tr.GetGroupVersionKind().GroupVersion().String(),
 		b.tr.Namespace,
-		b.tr.Kind,
+		b.tr.GetGroupVersionKind().Kind,
 		b.tr.Name,
 		string(b.tr.UID),
 	)

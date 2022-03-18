@@ -69,8 +69,8 @@ func NewStorageBackend(ctx context.Context, logger *zap.SugaredLogger, tr *v1bet
 
 	// guard server connection
 	server := cfg.Storage.Grafeas.Server
-	if !isTrustedHost(server) {
-		return nil, errors.New("Untrusted grafeas endpoint!")
+	if err := checkTrustedHost(server); err != nil {
+		return nil, err
 	}
 
 	conn, err := grpc.Dial(cfg.Storage.Grafeas.Server,
@@ -335,11 +335,11 @@ func (b *Backend) retrieveOCIURI(opts config.StorageOpts) string {
 	return ""
 }
 
-func isTrustedHost(server string) bool {
+func checkTrustedHost(server string) error {
 	for _, t := range trustedHosts {
 		if strings.HasSuffix(server, t) {
-			return true
+			return nil
 		}
 	}
-	return false
+	return errors.New("Untrusted grafeas server!")
 }

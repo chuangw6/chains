@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/chains/pkg/chains/formats"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -31,6 +30,7 @@ import (
 	"github.com/tektoncd/chains/pkg/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	gstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/testing/protocmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	logtesting "knative.dev/pkg/logging/testing"
@@ -276,21 +276,8 @@ func testListOccurrences(ctx context.Context, t *testing.T, client pb.GrafeasV1B
 		t.Fatal("Failed to create ListOccurrences. error ", err)
 	}
 
-	// set compare option to ignore all unexported fields of ListOccurrencesResponse struct
-	// including unexported fields of the embedded structs.
-	opt := cmpopts.IgnoreUnexported(
-		pb.ListOccurrencesResponse{},
-		pb.Occurrence{},
-		pb.Resource{},
-		attestationpb.Details{},
-		attestationpb.Attestation{},
-		attestationpb.GenericSignedAttestation{},
-		commonpb.Signature{},
-		commonpb.Envelope{},
-		commonpb.EnvelopeSignature{},
-	)
-	if !cmp.Equal(got, wanted, opt) {
-		t.Errorf("Wrong list of occurrences received, got=%s", cmp.Diff(got, wanted, opt))
+	if !cmp.Equal(got, wanted, protocmp.Transform()) {
+		t.Errorf("Wrong list of occurrences received, got=%s", cmp.Diff(got, wanted, protocmp.Transform()))
 	}
 }
 

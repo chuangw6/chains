@@ -42,6 +42,11 @@ const (
 	noteNameFormat        = "projects/%s/notes/%s"
 )
 
+var trustedHosts = []string{
+	"googleapis.com",
+	// add more trusted hosts here
+}
+
 // Backend is a storage backend that stores signed payloads in the storage that
 // is built on the top of grafeas i.e. container analysis.
 type Backend struct {
@@ -60,6 +65,12 @@ func NewStorageBackend(ctx context.Context, logger *zap.SugaredLogger, tr *v1bet
 	creds, err := oauth.NewApplicationDefault(ctx, "https://www.googleapis.com/auth/cloud-platform")
 	if err != nil {
 		return nil, err
+	}
+
+	// guard server connection
+	server := cfg.Storage.Grafeas.Server
+	if !isTrustedHost(server) {
+		return nil, errors.New("Untrusted grafeas endpoint!")
 	}
 
 	conn, err := grpc.Dial(cfg.Storage.Grafeas.Server,
@@ -322,4 +333,13 @@ func (b *Backend) retrieveOCIURI(opts config.StorageOpts) string {
 	}
 
 	return ""
+}
+
+func isTrustedHost(server string) bool {
+	for _, t := range trustedHosts {
+		if strings.HasSuffix(server, t) {
+			return true
+		}
+	}
+	return false
 }

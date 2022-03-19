@@ -374,7 +374,6 @@ func (s *mockGrafeasV1Beta1Server) ListOccurrences(ctx context.Context, req *pb.
 
 		for id, occ := range s.occurences {
 			if id == uriFilter {
-				// log.Println("creazy")
 				occurrences = append(occurrences, occ)
 			}
 		}

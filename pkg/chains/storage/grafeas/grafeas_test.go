@@ -344,17 +344,6 @@ func (s *mockGrafeasV1Beta1Server) CreateOccurrence(ctx context.Context, req *pb
 	return expectedResponse, nil
 }
 
-func (s *mockGrafeasV1Beta1Server) GetOccurrence(ctx context.Context, req *pb.GetOccurrenceRequest) (*pb.Occurrence, error) {
-	if s.occurences == nil {
-		return nil, gstatus.Error(codes.NotFound, "The occurrence does not exist")
-	}
-	occID := req.GetName()
-	if _, exists := s.occurences[occID]; !exists {
-		return nil, gstatus.Error(codes.NotFound, "The occurrence does not exist")
-	}
-	return s.occurences[occID], nil
-}
-
 func (s *mockGrafeasV1Beta1Server) CreateNote(ctx context.Context, req *pb.CreateNoteRequest) (*pb.Note, error) {
 	noteID := fmt.Sprintf("%s/notes/%s", req.GetParent(), req.GetNoteId())
 	expectedResponse := req.GetNote()

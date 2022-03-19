@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -177,7 +178,17 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 	}
 
 	// get uri
-	objectIdentifier := backend.retrieveResourceURI(opts)
+	var objectIdentifier string
+	switch opts.PayloadFormat {
+	case formats.PayloadTypeSimpleSigning:
+		objectIdentifier = backend.getOCIURI(opts)
+	case formats.PayloadTypeInTotoIte6:
+		objectIdentifier = backend.getTaskRunURI()
+	default:
+		// for other signing formats, grafeas backend will not support
+		// we set a fake identifier for testing only
+		objectIdentifier = "placeholder_uri"
+	}
 
 	// check signature
 	expect_signature := map[string][]string{objectIdentifier: []string{signature}}
@@ -192,8 +203,7 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 
 	// check payload
 	expect_payload := map[string]string{objectIdentifier: string(payload)}
-	var got_payload map[string]string
-	got_payload, err = backend.RetrievePayloads(ctx, opts)
+	got_payload, err := backend.RetrievePayloads(ctx, opts)
 	if err != nil {
 		t.Fatal("RetrievePayloads.RetrievePayloads() failed. error:", err)
 	}
@@ -361,8 +371,24 @@ func (s *mockGrafeasV1Beta1Server) CreateNote(ctx context.Context, req *pb.Creat
 
 func (s *mockGrafeasV1Beta1Server) ListOccurrences(ctx context.Context, req *pb.ListOccurrencesRequest) (*pb.ListOccurrencesResponse, error) {
 	occurrences := []*pb.Occurrence{}
-	for _, v := range s.occurences {
-		occurrences = append(occurrences, v)
+
+	if req.GetFilter() == "" {
+		// if filter is not specified, return all
+		for _, occ := range s.occurences {
+			occurrences = append(occurrences, occ)
+		}
+	} else {
+		// if filter is specified
+		// mock how filter works in ListOccurrencesRequest
+		uriFilter := strings.Split(req.GetFilter(), "=")[1] // url filter that has quotes
+		uriFilter = uriFilter[1 : len(uriFilter)-1]         // remove quotes
+
+		for id, occ := range s.occurences {
+			if id == uriFilter {
+				// log.Println("creazy")
+				occurrences = append(occurrences, occ)
+			}
+		}
 	}
 	return &pb.ListOccurrencesResponse{Occurrences: occurrences}, nil
 }

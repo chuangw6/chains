@@ -50,11 +50,10 @@ var trustedHosts = []string{
 // Backend is a storage backend that stores signed payloads in the storage that
 // is built on the top of grafeas i.e. container analysis.
 type Backend struct {
-	logger         *zap.SugaredLogger
-	tr             *v1beta1.TaskRun
-	client         pb.GrafeasV1Beta1Client
-	cfg            config.Config
-	occurrenceRefs []string // store occurrence IDs that are automatically generated during the time of creation
+	logger *zap.SugaredLogger
+	tr     *v1beta1.TaskRun
+	client pb.GrafeasV1Beta1Client
+	cfg    config.Config
 }
 
 // NewStorageBackend returns a new Grafeas StorageBackend that stores signatures in a Grafeas server
@@ -86,11 +85,10 @@ func NewStorageBackend(ctx context.Context, logger *zap.SugaredLogger, tr *v1bet
 
 	// create backend instance
 	return &Backend{
-		logger:         logger,
-		tr:             tr,
-		client:         client,
-		cfg:            cfg,
-		occurrenceRefs: []string{},
+		logger: logger,
+		tr:     tr,
+		client: client,
+		cfg:    cfg,
 	}, nil
 }
 
@@ -128,9 +126,6 @@ func (b *Backend) StorePayload(ctx context.Context, rawPayload []byte, signature
 	if err != nil {
 		return err
 	}
-
-	// store reference to the newly generated occurrence for retrieve purpose
-	b.occurrenceRefs = append(b.occurrenceRefs, occurrence.GetName())
 
 	b.logger.Infof("Successfully created an occurrence %s (Occurrence_ID is automatically generated) for Taskrun %s/%s", occurrence.GetName(), b.tr.Namespace, b.tr.Name)
 	return nil
@@ -173,8 +168,7 @@ func (b *Backend) RetrieveSignatures(ctx context.Context, opts config.StorageOpt
 	for _, occ := range occurrences {
 		// get the Signature identifier
 		name := occ.GetResource().GetUri()
-		// get "Signatures" field from the occurrence DSSE envelop
-		// signatures := occurrence.GetEnvelope().GetSignatures()
+		// get "Signatures" field from the occurrence
 		signatures := occ.GetAttestation().GetAttestation().GetGenericSignedAttestation().GetSignatures()
 		// unmarshal signatures
 		unmarshalSigs := []string{}
@@ -254,11 +248,16 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 		},
 	}
 
+	var uri string
+	if opts.PayloadFormat == formats.PayloadTypeSimpleSigning {
+		uri = b.getOCIURI(opts)
+	} else {
+		uri = b.getTaskRunURI()
+	}
+
 	occurrence := &pb.Occurrence{
 		Resource: &pb.Resource{
-			// namespace-scoped resource
-			// https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-uris
-			Uri: b.retrieveResourceURI(opts),
+			Uri: uri,
 		},
 		NoteName: b.getNotePath(),
 		Details:  occurrenceDetails,
@@ -295,32 +294,47 @@ func (b *Backend) getContentType(opts config.StorageOpts) attestationpb.GenericS
 	return attestationpb.GenericSignedAttestation_CONTENT_TYPE_UNSPECIFIED
 }
 
-// retrieve all occurrences using the list of auto-generated occurrence names that were stored previously
+// retrieve all occurrences created under a taskrun by filtering resource URI
 func (b *Backend) getOccurrences(ctx context.Context) ([]*pb.Occurrence, error) {
 	result := []*pb.Occurrence{}
 
-	for _, occName := range b.occurrenceRefs {
-		getOCCReq := &pb.GetOccurrenceRequest{
-			Name: occName,
+	// step 1: get all resource URIs created under the taskrun
+	uriFilters := []string{}
+	uriFilters = append(uriFilters, b.retrieveAllOCIURIs()...)
+	uriFilters = append(uriFilters, b.getTaskRunURI())
+
+	// step 2: find all occurrences by using ListOccurrences filters, and put them in result
+	for _, uriFilter := range uriFilters {
+		occs, err := b.findOccurrencesForCriteria(ctx, b.getProjectPath(), uriFilter)
+		if err != nil {
+			return result, err
 		}
-		occ, error := b.client.GetOccurrence(ctx, getOCCReq)
-		if error != nil {
-			return nil, error
-		}
-		result = append(result, occ)
+		result = append(result, occs...)
 	}
 
 	return result, nil
 }
 
-// compose resource URI based on the type of attestation (oci or taskrun)
-func (b *Backend) retrieveResourceURI(opts config.StorageOpts) string {
-	if opts.PayloadFormat == formats.PayloadTypeSimpleSigning {
-		// for oci artifact
-		return b.retrieveOCIURI(opts)
+// find all occurrences based on a number of criteria
+// - current criteria we use are just project name and resource uri
+// - we can add more criteria later if we want i.e. occurrence Kind, severity and PageSize etc.
+func (b *Backend) findOccurrencesForCriteria(ctx context.Context, projectPath string, resourceURI string) ([]*pb.Occurrence, error) {
+	occurences, err := b.client.ListOccurrences(ctx,
+		&pb.ListOccurrencesRequest{
+			Parent: projectPath,
+			Filter: fmt.Sprintf("resourceUrl=%q", resourceURI),
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
+	return occurences.GetOccurrences(), nil
+}
 
-	// for taskrun artifact
+// get resource uri for a taskrun in the format of namespace-scoped resource uri
+// `/apis/GROUP/VERSION/namespaces/NAMESPACE/RESOURCETYPE/NAME``
+// see more details here https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-uris
+func (b *Backend) getTaskRunURI() string {
 	return fmt.Sprintf("/apis/%s/namespaces/%s/%s/%s@%s",
 		b.tr.GetGroupVersionKind().GroupVersion().String(),
 		b.tr.GetNamespace(),
@@ -330,21 +344,34 @@ func (b *Backend) retrieveResourceURI(opts config.StorageOpts) string {
 	)
 }
 
-// Given the TaskRun, retrieve the OCI image's URL.
-func (b *Backend) retrieveOCIURI(opts config.StorageOpts) string {
+// get resource uri for an oci image in the format of `IMAGE_URL@IMAGE_DIGEST`
+func (b *Backend) getOCIURI(opts config.StorageOpts) string {
+	imgs := b.retrieveAllOCIURIs()
+	for _, img := range imgs {
+		// get digest part of the image representation
+		digest := strings.Split(img, "sha256:")[1]
+
+		// for oci image, the key in StorageOpts will be the first 12 chars of digest
+		// so we want to compare
+		digestKey := digest[:12]
+		if digestKey == opts.Key {
+			return img
+		}
+	}
+	return ""
+}
+
+// get the uri of all images for a specific taskrun in the format of `IMAGE_URL@IMAGE_DIGEST`
+func (b *Backend) retrieveAllOCIURIs() []string {
+	result := []string{}
 	images := artifacts.ExtractOCIImagesFromResults(b.tr, b.logger)
 
 	for _, image := range images {
 		ref := image.(name.Digest)
-		// for oci image, the key in StorageOpts will be the first 12 chars of digest
-		digestKey := strings.TrimPrefix(ref.DigestStr(), "sha256:")[:12]
-
-		if digestKey == opts.Key {
-			return ref.Name()
-		}
+		result = append(result, ref.Name())
 	}
 
-	return ""
+	return result
 }
 
 func checkTrustedHost(server string) error {

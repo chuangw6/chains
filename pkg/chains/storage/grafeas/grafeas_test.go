@@ -163,7 +163,7 @@ func TestBackend_StorePayload(t *testing.T) {
 			}
 			// test if the attestation of the taskrun/oci artifact can be successfully stored into grafeas server
 			// and test if payloads and signatures inside the attestation can be retrieved.
-			testInterface(ctx, t, test, backend, test.args.payload, test.args.signature, test.args.opts)
+			testInterface(ctx, t, test, backend)
 		})
 	}
 
@@ -172,29 +172,29 @@ func TestBackend_StorePayload(t *testing.T) {
 }
 
 // test attestation storage and retrieval
-func testInterface(ctx context.Context, t *testing.T, test testConfig, backend Backend, payload []byte, signature string, opts config.StorageOpts) {
-	if err := backend.StorePayload(ctx, payload, signature, opts); (err != nil) != test.wantErr {
+func testInterface(ctx context.Context, t *testing.T, test testConfig, backend Backend) {
+	if err := backend.StorePayload(ctx, test.args.payload, test.args.signature, test.args.opts); (err != nil) != test.wantErr {
 		t.Fatalf("Backend.StorePayload() failed. error:%v, wantErr:%v", err, test.wantErr)
 	}
 
 	// get uri
 	var objectIdentifier string
-	switch opts.PayloadFormat {
+	switch test.args.opts.PayloadFormat {
 	case formats.PayloadTypeSimpleSigning:
-		objectIdentifier = backend.getOCIURI(opts)
+		objectIdentifier = backend.getOCIURI(test.args.opts)
 	case formats.PayloadTypeInTotoIte6:
 		objectIdentifier = backend.getTaskRunURI()
 	default:
 		// for other signing formats, grafeas backend will not support
 		if !test.wantErr {
-			t.Fatalf("Wrong payload format is configured. format:%v, wantErr:%v", opts.PayloadFormat, test.wantErr)
+			t.Fatalf("Wrong payload format is configured. format:%v, wantErr:%v", test.args.opts.PayloadFormat, test.wantErr)
 		}
 		return
 	}
 
 	// check signature
-	expect_signature := map[string][]string{objectIdentifier: []string{signature}}
-	got_signature, err := backend.RetrieveSignatures(ctx, opts)
+	expect_signature := map[string][]string{objectIdentifier: []string{test.args.signature}}
+	got_signature, err := backend.RetrieveSignatures(ctx, test.args.opts)
 	if err != nil {
 		t.Fatal("Backend.RetrieveSignatures() failed. error:", err)
 	}
@@ -204,8 +204,8 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 	}
 
 	// check payload
-	expect_payload := map[string]string{objectIdentifier: string(payload)}
-	got_payload, err := backend.RetrievePayloads(ctx, opts)
+	expect_payload := map[string]string{objectIdentifier: string(test.args.payload)}
+	got_payload, err := backend.RetrievePayloads(ctx, test.args.opts)
 	if err != nil {
 		t.Fatalf("RetrievePayloads.RetrievePayloads() failed. error:%v", err)
 	}

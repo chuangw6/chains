@@ -81,7 +81,7 @@ func TestBackend_ServerConnCheck(t *testing.T) {
 func TestBackend_StorePayload(t *testing.T) {
 	tests := []testConfig{
 		{
-			name: "TEST 1: intoto for taskrun, no error",
+			name: "intoto for taskrun, no error",
 			args: args{
 				tr: &v1beta1.TaskRun{
 					ObjectMeta: metav1.ObjectMeta{
@@ -97,7 +97,7 @@ func TestBackend_StorePayload(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "TEST 2: simplesining for oci, no error",
+			name: "simplesigning for oci, no error",
 			args: args{
 				tr: &v1beta1.TaskRun{
 					ObjectMeta: metav1.ObjectMeta{
@@ -122,7 +122,7 @@ func TestBackend_StorePayload(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "TEST 3: tekton format for taskrun, error",
+			name: "tekton format for taskrun, error",
 			args: args{
 				tr: &v1beta1.TaskRun{
 					ObjectMeta: metav1.ObjectMeta{

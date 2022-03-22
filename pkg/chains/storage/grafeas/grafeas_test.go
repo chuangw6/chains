@@ -174,7 +174,7 @@ func TestBackend_StorePayload(t *testing.T) {
 // test attestation storage and retrieval
 func testInterface(ctx context.Context, t *testing.T, test testConfig, backend Backend, payload []byte, signature string, opts config.StorageOpts) {
 	if err := backend.StorePayload(ctx, payload, signature, opts); (err != nil) != test.wantErr {
-		t.Fatal("Backend.StorePayload() failed. error:", err, "wantErr:", test.wantErr)
+		t.Fatalf("Backend.StorePayload() failed. error:%v, wantErr:%v", err, test.wantErr)
 	}
 
 	// get uri
@@ -186,8 +186,10 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 		objectIdentifier = backend.getTaskRunURI()
 	default:
 		// for other signing formats, grafeas backend will not support
-		// we set a fake identifier for testing only
-		objectIdentifier = "placeholder_uri"
+		if !test.wantErr {
+			t.Fatalf("Wrong payload format is configured. format:%v, wantErr:%v", opts.PayloadFormat, test.wantErr)
+		}
+		return
 	}
 
 	// check signature
@@ -197,18 +199,18 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 		t.Fatal("Backend.RetrieveSignatures() failed. error:", err)
 	}
 
-	if !cmp.Equal(got_signature, expect_signature) && !test.wantErr {
-		t.Errorf("Wrong signature object received, got=%s", cmp.Diff(got_signature, expect_signature))
+	if !cmp.Equal(got_signature, expect_signature) {
+		t.Errorf("Wrong signature object received, got=%v", cmp.Diff(got_signature, expect_signature))
 	}
 
 	// check payload
 	expect_payload := map[string]string{objectIdentifier: string(payload)}
 	got_payload, err := backend.RetrievePayloads(ctx, opts)
 	if err != nil {
-		t.Fatal("RetrievePayloads.RetrievePayloads() failed. error:", err)
+		t.Fatalf("RetrievePayloads.RetrievePayloads() failed. error:%v", err)
 	}
 
-	if !cmp.Equal(got_payload, expect_payload) && !test.wantErr {
+	if !cmp.Equal(got_payload, expect_payload) {
 		t.Errorf("Wrong payload object received, got=%s", cmp.Diff(got_payload, expect_payload))
 	}
 }
@@ -231,7 +233,7 @@ func testListOccurrences(ctx context.Context, t *testing.T, client pb.GrafeasV1B
 						Attestation: &attestationpb.Attestation{
 							Signature: &attestationpb.Attestation_GenericSignedAttestation{
 								GenericSignedAttestation: &attestationpb.GenericSignedAttestation{
-									// ContentType: for taskrun, this will be GenericSignedAttestation_CONTENT_TYPE_UNSPECIFIED, so this will not show up
+									ContentType:       attestationpb.GenericSignedAttestation_CONTENT_TYPE_UNSPECIFIED,
 									SerializedPayload: []byte("taskrun payload"),
 									Signatures: []*commonpb.Signature{
 										{

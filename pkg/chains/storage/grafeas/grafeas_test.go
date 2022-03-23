@@ -360,22 +360,46 @@ func (s *mockGrafeasV1Beta1Server) CreateNote(ctx context.Context, req *pb.Creat
 func (s *mockGrafeasV1Beta1Server) ListOccurrences(ctx context.Context, req *pb.ListOccurrencesRequest) (*pb.ListOccurrencesResponse, error) {
 	occurrences := []*pb.Occurrence{}
 
-	if req.GetFilter() == "" {
-		// if filter is not specified, return all
+	// if filter string is empty, the expected behaviour will be to return all.
+	if len(req.GetFilter()) == 0 {
 		for _, occ := range s.occurences {
 			occurrences = append(occurrences, occ)
 		}
-	} else {
-		// if filter is specified
-		// mock how filter works in ListOccurrencesRequest
-		uriFilter := strings.Split(req.GetFilter(), "=")[1] // url filter that has quotes
-		uriFilter = uriFilter[1 : len(uriFilter)-1]         // remove quotes
+		return &pb.ListOccurrencesResponse{Occurrences: occurrences}, nil
+	}
 
+	// if the filter string is not empty, do the filtering.
+	// mock how uri filter works
+	uris := parseURIFilterString(req.GetFilter())
+
+	for _, uri := range uris {
 		for id, occ := range s.occurences {
-			if id == uriFilter {
+			if uri == id {
 				occurrences = append(occurrences, occ)
 			}
 		}
 	}
 	return &pb.ListOccurrencesResponse{Occurrences: occurrences}, nil
+}
+
+// parse a chained uri filter string to a list of uris
+// example:
+// 	- input: `resourceUrl="foo" OR resourceUrl="bar"`
+// 	- output: ["foo", "bar"]
+func parseURIFilterString(filter string) []string {
+	results := []string{}
+
+	// a raw filter string will look like `resourceUrl="foo" OR resourceUrl="bar"`
+	// 1. break them into seperate statements
+	statements := strings.Split(filter, " OR ")
+
+	for _, statement := range statements {
+		// each statement looks like `resourceUrl="foo"`
+		// 2. extract `foo`
+		uriWithQuotes := strings.Split(statement, "=")[1]
+		uri := uriWithQuotes[1 : len(uriWithQuotes)-1]
+		results = append(results, uri)
+	}
+
+	return results
 }

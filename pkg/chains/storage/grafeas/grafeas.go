@@ -296,35 +296,35 @@ func (b *Backend) getContentType(opts config.StorageOpts) attestationpb.GenericS
 
 // retrieve all occurrences created under a taskrun by filtering resource URI
 func (b *Backend) getOccurrences(ctx context.Context) ([]*pb.Occurrence, error) {
-	result := []*pb.Occurrence{}
-
 	// step 1: get all resource URIs created under the taskrun
 	uriFilters := []string{}
 	uriFilters = append(uriFilters, b.retrieveAllOCIURIs()...)
 	uriFilters = append(uriFilters, b.getTaskRunURI())
 
-	// step 2: find all occurrences by using ListOccurrences filters, and put them in result
-	for _, uriFilter := range uriFilters {
-		occs, err := b.findOccurrencesForCriteria(ctx, b.getProjectPath(), uriFilter)
-		if err != nil {
-			return result, err
-		}
-		result = append(result, occs...)
+	// step 2: find all occurrences by using ListOccurrences filters
+	occs, err := b.findOccurrencesForCriteria(ctx, b.getProjectPath(), uriFilters)
+	if err != nil {
+		return nil, err
 	}
-
-	return result, nil
+	return occs, nil
 }
 
 // find all occurrences based on a number of criteria
 // - current criteria we use are just project name and resource uri
 // - we can add more criteria later if we want i.e. occurrence Kind, severity and PageSize etc.
-func (b *Backend) findOccurrencesForCriteria(ctx context.Context, projectPath string, resourceURI string) ([]*pb.Occurrence, error) {
+func (b *Backend) findOccurrencesForCriteria(ctx context.Context, projectPath string, resourceURIs []string) ([]*pb.Occurrence, error) {
+	var uriFilters []string
+	for _, url := range resourceURIs {
+		uriFilters = append(uriFilters, fmt.Sprintf("resourceUrl=%q", url))
+	}
+
 	occurences, err := b.client.ListOccurrences(ctx,
 		&pb.ListOccurrencesRequest{
 			Parent: projectPath,
-			Filter: fmt.Sprintf("resourceUrl=%q", resourceURI),
+			Filter: strings.Join(uriFilters, " OR "),
 		},
 	)
+
 	if err != nil {
 		return nil, err
 	}

@@ -118,7 +118,10 @@ func (b *Backend) StorePayload(ctx context.Context, rawPayload []byte, signature
 	}
 
 	// step2: create occurrence request
-	occurrenceReq := b.createOccurrenceRequest(rawPayload, signature, opts)
+	occurrenceReq, err := b.createOccurrenceRequest(rawPayload, signature, opts)
+	if err != nil {
+		return err
+	}
 
 	// step3: create/store occurrence
 	occurrence, err := b.client.CreateOccurrence(ctx, occurrenceReq)
@@ -216,7 +219,7 @@ func (b *Backend) createNote(ctx context.Context) error {
 	return nil
 }
 
-func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts config.StorageOpts) *pb.CreateOccurrenceRequest {
+func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts config.StorageOpts) (*pb.CreateOccurrenceRequest, error) {
 	occurrenceDetails := &pb.Occurrence_Attestation{
 		Attestation: &attestationpb.Details{
 			Attestation: &attestationpb.Attestation{
@@ -247,11 +250,9 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 		},
 	}
 
-	var uri string
-	if opts.PayloadFormat == formats.PayloadTypeSimpleSigning {
-		uri = b.getOCIURI(opts)
-	} else {
-		uri = b.getTaskRunURI()
+	uri, err := b.getResourceURI(opts)
+	if err != nil {
+		return nil, err
 	}
 
 	occurrence := &pb.Occurrence{
@@ -268,7 +269,7 @@ func (b *Backend) createOccurrenceRequest(payload []byte, signature string, opts
 		Occurrence: occurrence,
 	}
 
-	return occurrenceRequest
+	return occurrenceRequest, nil
 }
 
 func (b *Backend) getProjectPath() string {
@@ -328,6 +329,18 @@ func (b *Backend) findOccurrencesForCriteria(ctx context.Context, projectPath st
 		return nil, err
 	}
 	return occurences.GetOccurrences(), nil
+}
+
+// get resource uri based on the configured payload format that helps differentiate artifact type as well.
+func (b *Backend) getResourceURI(opts config.StorageOpts) (string, error) {
+	switch opts.PayloadFormat {
+	case formats.PayloadTypeSimpleSigning:
+		return b.getOCIURI(opts), nil
+	case formats.PayloadTypeInTotoIte6:
+		return b.getTaskRunURI(), nil
+	default:
+		return "", errors.New("Invalid payload format. Only in-toto and simplesigning are supported.")
+	}
 }
 
 // get resource uri for a taskrun in the format of namespace-scoped resource uri

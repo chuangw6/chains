@@ -184,19 +184,9 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 		t.Fatalf("Backend.StorePayload() failed. error:%v, wantErr:%v", err, test.wantErr)
 	}
 
-	// get uri
-	var objectIdentifier string
-	switch test.args.opts.PayloadFormat {
-	case formats.PayloadTypeSimpleSigning:
-		objectIdentifier = backend.getOCIURI(test.args.opts)
-	case formats.PayloadTypeInTotoIte6:
-		objectIdentifier = backend.getTaskRunURI()
-	default:
-		// for other signing formats, grafeas backend will not support
-		if !test.wantErr {
-			t.Fatalf("Wrong payload format is configured. format:%v, wantErr:%v", test.args.opts.PayloadFormat, test.wantErr)
-		}
-		return
+	objectIdentifier, err := backend.getResourceURI(test.args.opts)
+	if (err != nil) != test.wantErr {
+		t.Fatalf("Backend.getResourceURI() failed. error:%v, wantErr:%v", err, test.wantErr)
 	}
 
 	// check signature
@@ -206,7 +196,7 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 		t.Fatal("Backend.RetrieveSignatures() failed. error:", err)
 	}
 
-	if !cmp.Equal(got_signature, expect_signature) {
+	if !cmp.Equal(got_signature, expect_signature) && !test.wantErr {
 		t.Errorf("Wrong signature object received, got=%v", cmp.Diff(got_signature, expect_signature))
 	}
 
@@ -217,7 +207,7 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 		t.Fatalf("RetrievePayloads.RetrievePayloads() failed. error:%v", err)
 	}
 
-	if !cmp.Equal(got_payload, expect_payload) {
+	if !cmp.Equal(got_payload, expect_payload) && !test.wantErr {
 		t.Errorf("Wrong payload object received, got=%s", cmp.Diff(got_payload, expect_payload))
 	}
 }

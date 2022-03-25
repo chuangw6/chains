@@ -62,22 +62,6 @@ type mockGrafeasV1Beta1Server struct {
 
 var grafeasServer mockGrafeasV1Beta1Server
 
-func TestBackend_ServerConnCheck(t *testing.T) {
-	tests := []struct {
-		serverName string
-		wantErr    bool
-	}{
-		{serverName: "dns:///containeranalysis.googleapis.com", wantErr: false},
-		{serverName: "dns:///containeranalysis.fake.com", wantErr: true},
-	}
-
-	for _, test := range tests {
-		if err := checkTrustedHost(test.serverName); (err != nil) != test.wantErr {
-			t.Errorf("The behaviour of checking trusted host is wrong. error = %v, wantErr = %v", err, test.wantErr)
-		}
-	}
-}
-
 func TestBackend_StorePayload(t *testing.T) {
 	tests := []testConfig{
 		{

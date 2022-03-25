@@ -96,8 +96,6 @@ type GrafeasConfig struct {
 	ProjectID string
 	// note id used to create a note that an occurrence will be attached to
 	NoteID string
-	// grafeas storage backend server address
-	Server string
 }
 
 type TransparencyConfig struct {
@@ -121,7 +119,6 @@ const (
 	docDBUrlKey              = "storage.docdb.url"
 	grafeasProjectIDKey      = "storage.grafeas.projectid"
 	grafeasNoteIDKey         = "storage.grafeas.noteid"
-	grafeasServer            = "storage.grafeas.server"
 	// No config needed for Tekton object storage
 
 	// No config needed for x509 signer
@@ -196,7 +193,6 @@ func NewConfigFromMap(data map[string]string) (*Config, error) {
 		asString(docDBUrlKey, &cfg.Storage.DocDB.URL),
 		asString(grafeasProjectIDKey, &cfg.Storage.Grafeas.ProjectID),
 		asString(grafeasNoteIDKey, &cfg.Storage.Grafeas.NoteID),
-		asString(grafeasServer, &cfg.Storage.Grafeas.Server),
 
 		oneOf(transparencyEnabledKey, &cfg.Transparency.Enabled, "true", "manual"),
 		oneOf(transparencyEnabledKey, &cfg.Transparency.VerifyAnnotation, "manual"),

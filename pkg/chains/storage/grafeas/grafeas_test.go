@@ -50,18 +50,68 @@ type testConfig struct {
 	wantErr bool
 }
 
-type mockGrafeasV1Beta1Server struct {
-	// Embed for forward compatibility.
-	// Tests will keep working if more methods are added in the future.
-	pb.UnimplementedGrafeasV1Beta1Server
+// This function is to test the implementation of the fake server's ListOccurrences function.
+// As the filter logic is implemented, we want to make sure it can be trusted before testing store & retrieve.
+func TestBackend_ListOccurrences(t *testing.T) {
+	// get grafeas client
+	ctx := context.Background()
+	conn, client, err := setupConnection()
+	if err != nil {
+		t.Fatal("Failed to create grafeas client.")
+	}
+	defer conn.Close()
 
-	// Assume there is only one project for storing notes and occurences
-	occurences map[string]*pb.Occurrence
-	notes      map[string]*pb.Note
+	// two sample occurrences used for testing
+	occs := getExpectedOccurrences()
+
+	// store occurrences into the fake server
+	for _, occ := range occs {
+		client.CreateOccurrence(ctx, &pb.CreateOccurrenceRequest{Occurrence: occ})
+	}
+
+	// construct expected ListOccurrencesResponse
+	wantedResponse := &pb.ListOccurrencesResponse{Occurrences: occs}
+
+	// 1. test empty filter string - return all occurrences
+	got, err := client.ListOccurrences(ctx, &pb.ListOccurrencesRequest{})
+	if err != nil {
+		t.Fatal("Failed to call ListOccurrences. error ", err)
+	}
+	if !cmp.Equal(got, wantedResponse, protocmp.Transform()) {
+		t.Errorf("Wrong list of occurrences received for empty filter, got=%s", cmp.Diff(got, wantedResponse, protocmp.Transform()))
+	}
+
+	// 2. test multiple chained filter - return multiple occurrences
+	got, err = client.ListOccurrences(ctx, &pb.ListOccurrencesRequest{
+		Filter: `resourceUrl="/apis/tekton.dev/v1beta1/namespaces/foo1/TaskRun/bar1@uid1" OR resourceUrl="gcr.io/test/kaniko-chains1@sha256:cfe4f0bf41c80609214f9b8ec0408b1afb28b3ced343b944aaa05d47caba3e00"`,
+	})
+	if err != nil {
+		t.Fatal("Failed to call ListOccurrences. error ", err)
+	}
+
+	// wanted response should be same as #1 as there are only two occurrences stored
+	if !cmp.Equal(got, wantedResponse, protocmp.Transform()) {
+		t.Errorf("Wrong list of occurrences received for multiple filters, got=%s", cmp.Diff(got, wantedResponse, protocmp.Transform()))
+	}
+
+	// 3. test a single filter - return one occurrence
+	got, err = client.ListOccurrences(ctx, &pb.ListOccurrencesRequest{
+		Filter: `resourceUrl="gcr.io/test/kaniko-chains1@sha256:cfe4f0bf41c80609214f9b8ec0408b1afb28b3ced343b944aaa05d47caba3e00"`,
+	})
+	if err != nil {
+		t.Fatal("Failed to call ListOccurrences. error ", err)
+	}
+
+	wantedResponse = &pb.ListOccurrencesResponse{Occurrences: occs[1:]}
+	if !cmp.Equal(got, wantedResponse, protocmp.Transform()) {
+		t.Errorf("Wrong list of occurrences received for a single filter, got=%s", cmp.Diff(got, wantedResponse, protocmp.Transform()))
+	}
 }
 
-var grafeasServer mockGrafeasV1Beta1Server
-
+/* This function is to test
+- if the StorePayload function can create correct occurrences and store them into grafeas server
+- if the RetrievePayloads and RetrieveSignatures functions work properly to fetch correct payloads and signatures
+*/
 func TestBackend_StorePayload(t *testing.T) {
 	tests := []testConfig{
 		{
@@ -158,8 +208,17 @@ func TestBackend_StorePayload(t *testing.T) {
 		})
 	}
 
-	// test if all occurrences generated from `StorePayload` are what we expect.
-	testListOccurrences(ctx, t, client)
+	// test if occurrences are created correctly from the StorePayload function
+	// - ProjectID field in ListOccurrencesRequest doesn't matter here because we assume there is only one project in the mocked server.
+	// - ListOccurrencesRequest with empty filter should be able to fetch all occurrences.
+	got, err := client.ListOccurrences(ctx, &pb.ListOccurrencesRequest{})
+	if err != nil {
+		t.Fatal("Failed to call ListOccurrences. error ", err)
+	}
+	wantedResponse := &pb.ListOccurrencesResponse{Occurrences: getExpectedOccurrences()}
+	if !cmp.Equal(got, wantedResponse, protocmp.Transform()) {
+		t.Errorf("Wrong list of occurrences received for empty filter, got=%s", cmp.Diff(got, wantedResponse, protocmp.Transform()))
+	}
 }
 
 // test attestation storage and retrieval
@@ -193,48 +252,6 @@ func testInterface(ctx context.Context, t *testing.T, test testConfig, backend B
 
 	if !cmp.Equal(got_payload, expect_payload) && !test.wantErr {
 		t.Errorf("Wrong payload object received, got=%s", cmp.Diff(got_payload, expect_payload))
-	}
-}
-
-// test occurrences are generated correctly
-func testListOccurrences(ctx context.Context, t *testing.T, client pb.GrafeasV1Beta1Client) {
-	wantedOccurrences := getExpectedOccurrences()
-
-	// 1. test empty filter - all occurrences
-	// ProjectID field in ListOccurrencesRequest doesn't matter here because we assume there is only one project in the mocked server.
-	got, err := client.ListOccurrences(ctx, &pb.ListOccurrencesRequest{})
-	if err != nil {
-		t.Fatal("Failed to call ListOccurrences. error ", err)
-	}
-	wantedResponse := &pb.ListOccurrencesResponse{Occurrences: wantedOccurrences}
-	if !cmp.Equal(got, wantedResponse, protocmp.Transform()) {
-		t.Errorf("Wrong list of occurrences received for empty filter, got=%s", cmp.Diff(got, wantedResponse, protocmp.Transform()))
-	}
-
-	// 2. test multiple chained filter - return multiple occurrences
-	got, err = client.ListOccurrences(ctx, &pb.ListOccurrencesRequest{
-		Filter: `resourceUrl="/apis/tekton.dev/v1beta1/namespaces/foo1/TaskRun/bar1@uid1" OR resourceUrl="gcr.io/test/kaniko-chains1@sha256:cfe4f0bf41c80609214f9b8ec0408b1afb28b3ced343b944aaa05d47caba3e00"`,
-	})
-	if err != nil {
-		t.Fatal("Failed to call ListOccurrences. error ", err)
-	}
-
-	// wanted response should be same as #1 as there are only two occurrences stored
-	if !cmp.Equal(got, wantedResponse, protocmp.Transform()) {
-		t.Errorf("Wrong list of occurrences received for multiple filters, got=%s", cmp.Diff(got, wantedResponse, protocmp.Transform()))
-	}
-
-	// 3. test a single filter - return one occurrence
-	got, err = client.ListOccurrences(ctx, &pb.ListOccurrencesRequest{
-		Filter: `resourceUrl="gcr.io/test/kaniko-chains1@sha256:cfe4f0bf41c80609214f9b8ec0408b1afb28b3ced343b944aaa05d47caba3e00" OR resourceUrl="/apis/tekton.dev/v1beta1/namespaces/foo2/TaskRun/bar2@uid2"`,
-	})
-	if err != nil {
-		t.Fatal("Failed to call ListOccurrences. error ", err)
-	}
-
-	wantedResponse = &pb.ListOccurrencesResponse{Occurrences: wantedOccurrences[1:]}
-	if !cmp.Equal(got, wantedResponse, protocmp.Transform()) {
-		t.Errorf("Wrong list of occurrences received for a single filter, got=%s", cmp.Diff(got, wantedResponse, protocmp.Transform()))
 	}
 }
 
@@ -320,7 +337,7 @@ func getExpectedOccurrences() []*pb.Occurrence {
 // and return the client object to the caller
 func setupConnection() (*grpc.ClientConn, pb.GrafeasV1Beta1Client, error) {
 	serv := grpc.NewServer()
-	pb.RegisterGrafeasV1Beta1Server(serv, &grafeasServer)
+	pb.RegisterGrafeasV1Beta1Server(serv, &mockGrafeasV1Beta1Server{})
 
 	lis, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
@@ -340,6 +357,16 @@ func setupConnection() (*grpc.ClientConn, pb.GrafeasV1Beta1Client, error) {
 
 // --------------------- Mocked GrafeasV1Beta1Server interface -----------------
 // https://pkg.go.dev/github.com/grafeas/grafeas@v0.2.0/proto/v1beta1/grafeas_go_proto#GrafeasV1Beta1Server
+type mockGrafeasV1Beta1Server struct {
+	// Embed for forward compatibility.
+	// Tests will keep working if more methods are added in the future.
+	pb.UnimplementedGrafeasV1Beta1Server
+
+	// Assume there is only one project for storing notes and occurences
+	occurences map[string]*pb.Occurrence
+	notes      map[string]*pb.Note
+}
+
 func (s *mockGrafeasV1Beta1Server) CreateOccurrence(ctx context.Context, req *pb.CreateOccurrenceRequest) (*pb.Occurrence, error) {
 	if s.occurences == nil {
 		s.occurences = make(map[string]*pb.Occurrence)
@@ -400,7 +427,7 @@ func parseURIFilterString(filter string) []string {
 	results := []string{}
 
 	// a raw filter string will look like `resourceUrl="foo" OR resourceUrl="bar"`
-	// 1. break them into seperate statements
+	// 1. break them into separate statements
 	statements := strings.Split(filter, " OR ")
 
 	for _, statement := range statements {

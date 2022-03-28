@@ -61,6 +61,7 @@ func NewStorageBackend(ctx context.Context, logger *zap.SugaredLogger, tr *v1bet
 		return nil, err
 	}
 
+	// TODO: make grafeas server configurable including checking if hostname is trusted
 	server := "dns:///containeranalysis.googleapis.com"
 
 	conn, err := grpc.Dial(server,
@@ -87,7 +88,7 @@ func NewStorageBackend(ctx context.Context, logger *zap.SugaredLogger, tr *v1bet
 func (b *Backend) StorePayload(ctx context.Context, rawPayload []byte, signature string, opts config.StorageOpts) error {
 	// We only support simplesigning for OCI images, and in-toto for taskrun.
 	if opts.PayloadFormat == formats.PayloadTypeTekton || opts.PayloadFormat == formats.PayloadTypeProvenance {
-		return errors.New("Container Analysis storage backend only supports for OCI images and in-toto attestations")
+		return errors.New("Grafeas storage backend only supports for OCI images and in-toto attestations")
 	}
 
 	// Check if projectID is configured. If not, stop and return an error
@@ -124,7 +125,7 @@ func (b *Backend) StorePayload(ctx context.Context, rawPayload []byte, signature
 	return nil
 }
 
-// Retrieve payloads from container analysis and store it in a map
+// Retrieve payloads from grafeas server and store it in a map
 func (b *Backend) RetrievePayloads(ctx context.Context, opts config.StorageOpts) (map[string]string, error) {
 	// initialize an empty map for result
 	result := make(map[string]string)
@@ -147,7 +148,7 @@ func (b *Backend) RetrievePayloads(ctx context.Context, opts config.StorageOpts)
 	return result, nil
 }
 
-// Retrieve signatures from container analysis and store it in a map
+// Retrieve signatures from grafeas server and store it in a map
 func (b *Backend) RetrieveSignatures(ctx context.Context, opts config.StorageOpts) (map[string][]string, error) {
 	// initialize an empty map for result
 	result := make(map[string][]string)

@@ -571,8 +571,9 @@ github.com/gostaticanalysis/comment/passes/commentmap
 github.com/gostaticanalysis/forcetypeassert
 # github.com/gostaticanalysis/nilerr v0.1.1
 github.com/gostaticanalysis/nilerr
-# github.com/grafeas/grafeas v0.2.0
+# github.com/grafeas/grafeas v0.2.2-0.20220321190638-fe57919e0686
 ## explicit
+github.com/grafeas/grafeas/proto/v1/grafeas_go_proto
 github.com/grafeas/grafeas/proto/v1beta1/attestation_go_proto
 github.com/grafeas/grafeas/proto/v1beta1/build_go_proto
 github.com/grafeas/grafeas/proto/v1beta1/common_go_proto
@@ -591,7 +592,7 @@ github.com/grafeas/grafeas/proto/v1beta1/vulnerability_go_proto
 github.com/grpc-ecosystem/grpc-gateway/internal
 github.com/grpc-ecosystem/grpc-gateway/runtime
 github.com/grpc-ecosystem/grpc-gateway/utilities
-# github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.0
+# github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.3
 github.com/grpc-ecosystem/grpc-gateway/v2/internal/httprule
 github.com/grpc-ecosystem/grpc-gateway/v2/runtime
 github.com/grpc-ecosystem/grpc-gateway/v2/utilities

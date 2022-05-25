@@ -15,16 +15,15 @@
 apiVersion: tekton.dev/v1beta1
 kind: TaskRun
 metadata:
-  name: kaniko-run
+  generateName: kaniko-run-
 spec:
+  serviceAccountName: myksa
   taskRef:
     name: kaniko-chains
   params:
   - name: IMAGE
-    value: ${REGISTRY}/kaniko-chains
+    # the repository in the artifact registry of where the image artifact generated from the task will be stored.
+    value: us-central1-docker.pkg.dev/chuangw-test/kaniko-example/kaniko-chains
   workspaces:
   - name: source
     emptyDir: {}
-  - name: dockerconfig
-    secret:
-      secretName: ${DOCKERCONFIG_SECRET}

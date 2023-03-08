@@ -31,6 +31,7 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	versioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	"go.uber.org/zap"
+	"k8s.io/client-go/dynamic"
 	"knative.dev/pkg/logging"
 )
 
@@ -45,6 +46,7 @@ type ObjectSigner struct {
 	Backends          map[string]storage.Backend
 	SecretPath        string
 	Pipelineclientset versioned.Interface
+	DynamicClient     dynamic.Interface
 }
 
 func allSigners(ctx context.Context, sp string, cfg config.Config, l *zap.SugaredLogger) map[string]signing.Signer {
@@ -99,6 +101,7 @@ func getSignableTypes(obj objects.TektonObject, logger *zap.SugaredLogger) ([]ar
 	}
 }
 
+// TODO 4: tektonObj will be based on unstructured type. As such, some operations might not be accessible anymore.
 // Signs TaskRun and PipelineRun objects, as well as generates attesations for each
 // Follows process of extract payload, sign payload, store payload and signature
 func (o *ObjectSigner) Sign(ctx context.Context, tektonObj objects.TektonObject) error {

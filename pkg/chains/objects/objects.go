@@ -24,9 +24,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"knative.dev/pkg/apis"
 )
+
+var TaskrunResource = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1beta1", Resource: "taskruns"}
 
 // Label added to TaskRuns identifying the associated pipeline Task
 const PipelineTaskLabel = "tekton.dev/pipelineTask"
@@ -40,13 +43,29 @@ type Object interface {
 	runtime.Object
 }
 
-// Result is a generic key value store containing the results
-// of Tekton operations. (eg. PipelineRun and TaskRun results)
+// we need to define our result/param type in Chains in order to handle the results parsed from raw json in a more efficient way.
+// // Result is a generic key value store containing the results
+// // of Tekton operations. (eg. PipelineRun and TaskRun results)
+//
+//	type Result struct {
+//		Name  string
+//		Type  v1beta1.ResultsType
+//		Value v1beta1.ArrayOrString
+//	}
 type Result struct {
-	Name  string
-	Type  v1beta1.ResultsType
-	Value v1beta1.ArrayOrString
+	Name  string   `json:"name"`
+	Value DataType `json:"value"`
 }
+
+type DataType struct {
+	Type      string            `json:"type"`
+	StringVal string            `json:"stringVal"`
+	ArrayVal  []string          `json:"arrayVal"`
+	ObjectVal map[string]string `json:"objectVal"`
+}
+
+// TODO 3: refactor TektonObject to be based on unstructured object and have some common operations to the objects
+// (i.e. status.results, status.spec, status.starttime completeiontime etc.)
 
 // Tekton object is an extended Kubernetes object with operations specific
 // to Tekton objects.
@@ -115,8 +134,13 @@ func (tro *TaskRunObject) GetResults() []Result {
 	res := []Result{}
 	for _, key := range tro.Status.TaskRunResults {
 		res = append(res, Result{
-			Name:  key.Name,
-			Value: key.Value,
+			Name: key.Name,
+			Value: DataType{
+				Type:      string(key.Type),
+				StringVal: key.Value.StringVal,
+				ArrayVal:  key.Value.ArrayVal,
+				ObjectVal: key.Value.ObjectVal,
+			},
 		})
 	}
 	return res
@@ -176,8 +200,13 @@ func (pro *PipelineRunObject) GetResults() []Result {
 	res := []Result{}
 	for _, key := range pro.Status.PipelineResults {
 		res = append(res, Result{
-			Name:  key.Name,
-			Value: key.Value,
+			Name: key.Name,
+			Value: DataType{
+				Type:      string(key.Value.Type),
+				StringVal: key.Value.StringVal,
+				ArrayVal:  key.Value.ArrayVal,
+				ObjectVal: key.Value.ObjectVal,
+			},
 		})
 	}
 	return res

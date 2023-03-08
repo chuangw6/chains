@@ -16,6 +16,7 @@ package artifacts
 import (
 	_ "crypto/sha256" // Recommended by go-digest.
 	_ "crypto/sha512" // Recommended by go-digest.
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -25,8 +26,9 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/tektoncd/chains/pkg/chains/objects"
 	"github.com/tektoncd/chains/pkg/config"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1" // WILL BE REMOVED
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -40,6 +42,7 @@ var (
 )
 
 type Signable interface {
+	// this needs to be refactored to support unstructured based TektonObject
 	ExtractObjects(obj objects.TektonObject) []interface{}
 	StorageBackend(cfg config.Config) sets.String
 	Signer(cfg config.Config) string
@@ -241,10 +244,50 @@ func ExtractOCIImagesFromResults(obj objects.TektonObject, logger *zap.SugaredLo
 	return objs
 }
 
+func ReimplExtractOCIImagesFromResults(u *unstructured.Unstructured, logger *zap.SugaredLogger) []interface{} {
+	objs := []interface{}{}
+	ss := reimplExtractTargetFromResults(u, "IMAGE_URL", "IMAGE_DIGEST", logger)
+	for _, s := range ss {
+		if s == nil || s.Digest == "" || s.URI == "" {
+			continue
+		}
+		dgst, err := name.NewDigest(fmt.Sprintf("%s@%s", s.URI, s.Digest))
+		if err != nil {
+			logger.Errorf("error getting digest: %v", err)
+			continue
+		}
+
+		objs = append(objs, dgst)
+	}
+	// look for a comma separated list of images
+	// ommited
+
+	return objs
+}
+
 // ExtractSignableTargetFromResults extracts signable targets that aim to generate intoto provenance as materials within TaskRun results and store them as StructuredSignable.
 func ExtractSignableTargetFromResults(obj objects.TektonObject, logger *zap.SugaredLogger) []*StructuredSignable {
 	objs := []*StructuredSignable{}
 	ss := extractTargetFromResults(obj, "ARTIFACT_URI", "ARTIFACT_DIGEST", logger)
+	// Only add it if we got both the signable URI and digest.
+	for _, s := range ss {
+		if s == nil || s.Digest == "" || s.URI == "" {
+			continue
+		}
+		if err := checkDigest(s.Digest); err != nil {
+			logger.Errorf("error getting digest %s: %v", s.Digest, err)
+			continue
+		}
+
+		objs = append(objs, s)
+	}
+
+	return objs
+}
+
+func ReimplExtractSignableTargetFromResults(u *unstructured.Unstructured, logger *zap.SugaredLogger) []*StructuredSignable {
+	objs := []*StructuredSignable{}
+	ss := reimplExtractTargetFromResults(u, "ARTIFACT_URI", "ARTIFACT_DIGEST", logger)
 	// Only add it if we got both the signable URI and digest.
 	for _, s := range ss {
 		if s == nil || s.Digest == "" || s.URI == "" {
@@ -301,11 +344,89 @@ func extractTargetFromResults(obj objects.TektonObject, identifierSuffix string,
 	return ss
 }
 
+func reimplExtractTargetFromResults(u *unstructured.Unstructured, identifierSuffix string, digestSuffix string, logger *zap.SugaredLogger) map[string]*StructuredSignable {
+	ss := map[string]*StructuredSignable{}
+
+	results, _ := getResults(u)
+	for _, res := range results {
+		if strings.HasSuffix(res.Name, identifierSuffix) {
+			if res.Value.StringVal == "" {
+				logger.Debugf("error getting string value for %s", res.Name)
+				continue
+			}
+			marker := strings.TrimSuffix(res.Name, identifierSuffix)
+			if v, ok := ss[marker]; ok {
+				v.URI = strings.TrimSpace(res.Value.StringVal)
+
+			} else {
+				ss[marker] = &StructuredSignable{URI: strings.TrimSpace(res.Value.StringVal)}
+			}
+			// TODO: add logic for Intoto signable target as input.
+		}
+		if strings.HasSuffix(res.Name, digestSuffix) {
+			if res.Value.StringVal == "" {
+				logger.Debugf("error getting string value for %s", res.Name)
+				continue
+			}
+			marker := strings.TrimSuffix(res.Name, digestSuffix)
+			if v, ok := ss[marker]; ok {
+				v.Digest = strings.TrimSpace(res.Value.StringVal)
+			} else {
+				ss[marker] = &StructuredSignable{Digest: strings.TrimSpace(res.Value.StringVal)}
+			}
+		}
+
+	}
+	return ss
+}
+
+// TODO: revise the result type and marshal and unmarshal
+func getResults(u *unstructured.Unstructured) ([]*objects.Result, error) {
+	results, found, err := unstructured.NestedSlice(u.UnstructuredContent(), "status", "taskResults")
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+	jsonResults, err := json.Marshal(results)
+	if err != nil {
+		return nil, err
+	}
+
+	var r []*objects.Result
+	if err = json.Unmarshal(jsonResults, &r); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
 // RetrieveMaterialsFromStructuredResults retrieves structured results from Tekton Object, and convert them into materials.
 func RetrieveMaterialsFromStructuredResults(obj objects.TektonObject, categoryMarker string, logger *zap.SugaredLogger) []slsa.ProvenanceMaterial {
 	// Retrieve structured provenance for inputs.
 	mats := []slsa.ProvenanceMaterial{}
 	ssts := ExtractStructuredTargetFromResults(obj, ArtifactsInputsResultName, logger)
+	for _, s := range ssts {
+		if err := checkDigest(s.Digest); err != nil {
+			logger.Debugf("Digest for %s not in the right format: %s, %v", s.URI, s.Digest, err)
+			continue
+		}
+		splits := strings.Split(s.Digest, ":")
+		alg := splits[0]
+		digest := splits[1]
+		mats = append(mats, slsa.ProvenanceMaterial{
+			URI:    s.URI,
+			Digest: map[string]string{alg: digest},
+		})
+	}
+	return mats
+}
+
+// RetrieveMaterialsFromStructuredResults retrieves structured results from Tekton Object, and convert them into materials.
+func ReimplRetrieveMaterialsFromStructuredResults(u *unstructured.Unstructured, categoryMarker string, logger *zap.SugaredLogger) []slsa.ProvenanceMaterial {
+	// Retrieve structured provenance for inputs.
+	mats := []slsa.ProvenanceMaterial{}
+	ssts := ReimplExtractStructuredTargetFromResults(u, ArtifactsInputsResultName, logger)
 	for _, s := range ssts {
 		if err := checkDigest(s.Digest); err != nil {
 			logger.Debugf("Digest for %s not in the right format: %s, %v", s.URI, s.Digest, err)
@@ -331,9 +452,9 @@ func ExtractStructuredTargetFromResults(obj objects.TektonObject, categoryMarker
 	}
 
 	// TODO(#592): support structured results using Run
-	results := []objects.Result{}
+	results := []*objects.Result{}
 	for _, res := range obj.GetResults() {
-		results = append(results, objects.Result{
+		results = append(results, &objects.Result{
 			Name:  res.Name,
 			Value: res.Value,
 		})
@@ -353,7 +474,29 @@ func ExtractStructuredTargetFromResults(obj objects.TektonObject, categoryMarker
 	return objs
 }
 
-func isStructuredResult(res objects.Result, categoryMarker string) (bool, error) {
+func ReimplExtractStructuredTargetFromResults(u *unstructured.Unstructured, categoryMarker string, logger *zap.SugaredLogger) []*StructuredSignable {
+	objs := []*StructuredSignable{}
+	if categoryMarker != ArtifactsInputsResultName && categoryMarker != ArtifactsOutputsResultName {
+		return objs
+	}
+	results, _ := getResults(u)
+
+	for _, res := range results {
+		if strings.HasSuffix(res.Name, categoryMarker) {
+			valid, err := isStructuredResult(res, categoryMarker)
+			if err != nil {
+				logger.Debugf("ExtractStructuredTargetFromResults: %v", err)
+			}
+			if valid {
+				logger.Debugf("Extracted Structured data from Result %s, %s", res.Value.ObjectVal["uri"], res.Value.ObjectVal["digest"])
+				objs = append(objs, &StructuredSignable{URI: res.Value.ObjectVal["uri"], Digest: res.Value.ObjectVal["digest"]})
+			}
+		}
+	}
+	return objs
+}
+
+func isStructuredResult(res *objects.Result, categoryMarker string) (bool, error) {
 	if !strings.HasSuffix(res.Name, categoryMarker) {
 		return false, nil
 	}

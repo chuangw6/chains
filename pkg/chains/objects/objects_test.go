@@ -165,13 +165,24 @@ func TestPipelineRun_GetResults(t *testing.T) {
 		assert.ElementsMatch(t, got, []Result{
 			{
 				Name: "img1_input_ARTIFACT_INPUTS",
-				Value: *v1beta1.NewObject(map[string]string{
-					"uri":    "gcr.io/foo/bar",
-					"digest": "sha256:05f95b26ed10668b7183c1e2da98610e91372fa9f510046d4ce5812addad86b7",
-				}),
+				Value: DataType{
+					ObjectVal: map[string]string{
+						"uri":    "gcr.io/foo/bar",
+						"digest": "sha256:05f95b26ed10668b7183c1e2da98610e91372fa9f510046d4ce5812addad86b7",
+					},
+				},
 			},
-			{Name: "mvn1_ARTIFACT_URI", Value: *v1beta1.NewArrayOrString("projects/test-project/locations/us-west4/repositories/test-repo/mavenArtifacts/com.google.guava:guava:31.0-jre")},
-			{Name: "mvn1_ARTIFACT_DIGEST", Value: *v1beta1.NewArrayOrString("sha256:05f95b26ed10668b7183c1e2da98610e91372fa9f510046d4ce5812addad86b5")},
+			{
+				Name: "mvn1_ARTIFACT_URI",
+				Value: DataType{
+					StringVal: "projects/test-project/locations/us-west4/repositories/test-repo/mavenArtifacts/com.google.guava:guava:31.0-jre",
+				},
+			},
+			{
+				Name: "mvn1_ARTIFACT_DIGEST",
+				Value: DataType{
+					StringVal: "sha256:05f95b26ed10668b7183c1e2da98610e91372fa9f510046d4ce5812addad86b5",
+				}},
 		})
 	})
 
@@ -185,13 +196,24 @@ func TestTaskRun_GetResults(t *testing.T) {
 		assert.ElementsMatch(t, got, []Result{
 			{
 				Name: "img1_input_ARTIFACT_INPUTS",
-				Value: *v1beta1.NewObject(map[string]string{
-					"uri":    "gcr.io/foo/bar",
-					"digest": "sha256:05f95b26ed10668b7183c1e2da98610e91372fa9f510046d4ce5812addad86b7",
-				}),
+				Value: DataType{
+					ObjectVal: map[string]string{
+						"uri":    "gcr.io/foo/bar",
+						"digest": "sha256:05f95b26ed10668b7183c1e2da98610e91372fa9f510046d4ce5812addad86b7",
+					},
+				},
 			},
-			{Name: "mvn1_ARTIFACT_URI", Value: *v1beta1.NewArrayOrString("projects/test-project/locations/us-west4/repositories/test-repo/mavenArtifacts/com.google.guava:guava:31.0-jre")},
-			{Name: "mvn1_ARTIFACT_DIGEST", Value: *v1beta1.NewArrayOrString("sha256:05f95b26ed10668b7183c1e2da98610e91372fa9f510046d4ce5812addad86b5")},
+			{
+				Name: "mvn1_ARTIFACT_URI",
+				Value: DataType{
+					StringVal: "projects/test-project/locations/us-west4/repositories/test-repo/mavenArtifacts/com.google.guava:guava:31.0-jre",
+				},
+			},
+			{
+				Name: "mvn1_ARTIFACT_DIGEST",
+				Value: DataType{
+					StringVal: "sha256:05f95b26ed10668b7183c1e2da98610e91372fa9f510046d4ce5812addad86b5",
+				}},
 		})
 	})
 

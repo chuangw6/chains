@@ -21,6 +21,7 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	taskrunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1beta1/taskrun"
+	"k8s.io/client-go/dynamic"
 	"knative.dev/pkg/logging"
 	pkgreconciler "knative.dev/pkg/reconciler"
 )
@@ -33,6 +34,7 @@ const (
 type Reconciler struct {
 	TaskRunSigner     signing.Signer
 	Pipelineclientset versioned.Interface
+	DynamicClient     dynamic.Interface
 }
 
 // Check that our Reconciler implements taskrunreconciler.Interface and taskrunreconciler.Finalizer
@@ -56,6 +58,11 @@ func (r *Reconciler) FinalizeKind(ctx context.Context, tr *v1beta1.TaskRun) pkgr
 		return nil
 	}
 
+	// TODO 2: change NewTaskRunObject to accept unstructured object
+	// unstructuredTr, err := r.DynamicClient.Resource(objects.TaskrunResource).Namespace(tr.Namespace).Get(ctx, tr.Name, metav1.GetOptions{})
+	// if err != nil {
+	// 	return err
+	// }
 	obj := objects.NewTaskRunObject(tr)
 
 	// Check to see if it has already been signed.

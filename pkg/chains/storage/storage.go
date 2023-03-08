@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// TODO 6: Refactor all the backend services that need to access values from TektonObject
 // Backend is an interface to store a chains Payload
 type Backend interface {
 	StorePayload(ctx context.Context, obj objects.TektonObject, rawPayload []byte, signature string, opts config.StorageOpts) error

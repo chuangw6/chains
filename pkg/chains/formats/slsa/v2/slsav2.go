@@ -48,6 +48,7 @@ func (s *Slsa) Wrap() bool {
 	return true
 }
 
+// TODO 5: refactor how the formatting service grabs attributes from unstructured objects.
 func (s *Slsa) CreatePayload(ctx context.Context, obj interface{}) (interface{}, error) {
 	switch v := obj.(type) {
 	case *objects.TaskRunObject:

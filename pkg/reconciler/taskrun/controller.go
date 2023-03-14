@@ -19,6 +19,7 @@ import (
 	"github.com/tektoncd/chains/pkg/chains"
 	"github.com/tektoncd/chains/pkg/chains/storage"
 	"github.com/tektoncd/chains/pkg/config"
+	"github.com/tektoncd/chains/pkg/internal/dynamicclient"
 	pipelineclient "github.com/tektoncd/pipeline/pkg/client/injection/client"
 	taskruninformer "github.com/tektoncd/pipeline/pkg/client/injection/informers/pipeline/v1beta1/taskrun"
 	taskrunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1beta1/taskrun"
@@ -35,16 +36,25 @@ func NewController(ctx context.Context, cmw configmap.Watcher) *controller.Impl 
 	taskRunInformer := taskruninformer.Get(ctx)
 
 	kubeClient := kubeclient.Get(ctx)
+
+	// TODO 1: get the dynamic client when the controller starts
+	dc, err := dynamicclient.NewClient()
+	if err != nil {
+		logging.FromContext(ctx).Fatalf("unable to get the dynamic client: %v", err)
+	}
+
 	pipelineClient := pipelineclient.Get(ctx)
 
 	tsSigner := &chains.ObjectSigner{
 		SecretPath:        SecretPath,
 		Pipelineclientset: pipelineClient,
+		DynamicClient:     dc,
 	}
 
 	c := &Reconciler{
 		TaskRunSigner:     tsSigner,
 		Pipelineclientset: pipelineClient,
+		DynamicClient:     dc,
 	}
 	impl := taskrunreconciler.NewImpl(ctx, c, func(impl *controller.Impl) controller.Options {
 		cfgStore := config.NewConfigStore(logger, func(name string, value interface{}) {

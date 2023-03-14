@@ -551,7 +551,7 @@ func TestValidateResults(t *testing.T) {
 			categoryMarker: ArtifactsOutputsResultName,
 			obj: objects.Result{
 				Name: "valid_result-ARTIFACT_OUTPUTS",
-				Value: v1beta1.ParamValue{
+				Value: objects.DataType{
 					ObjectVal: map[string]string{
 						"uri":    "gcr.io/foo/bar",
 						"digest": digest3,
@@ -566,7 +566,7 @@ func TestValidateResults(t *testing.T) {
 			categoryMarker: ArtifactsOutputsResultName,
 			obj: objects.Result{
 				Name: "missing_digest-ARTIFACT_OUTPUTS",
-				Value: v1beta1.ParamValue{
+				Value: objects.DataType{
 					ObjectVal: map[string]string{
 						"uri": "gcr.io/foo/bar",
 					},
@@ -580,7 +580,7 @@ func TestValidateResults(t *testing.T) {
 			categoryMarker: ArtifactsOutputsResultName,
 			obj: objects.Result{
 				Name: "missing_digest-ARTIFACT_OUTPUTS",
-				Value: v1beta1.ParamValue{
+				Value: objects.DataType{
 					ObjectVal: map[string]string{
 						"digest": digest3,
 					},
@@ -594,7 +594,7 @@ func TestValidateResults(t *testing.T) {
 			categoryMarker: ArtifactsOutputsResultName,
 			obj: objects.Result{
 				Name: "missing_digest-ARTIFACT_OUTPUTS",
-				Value: v1beta1.ParamValue{
+				Value: objects.DataType{
 					ObjectVal: map[string]string{
 						"uri":    "gcr.io/foo/bar",
 						"digest": "",
@@ -609,7 +609,7 @@ func TestValidateResults(t *testing.T) {
 			categoryMarker: ArtifactsOutputsResultName,
 			obj: objects.Result{
 				Name: "missing_digest-ARTIFACTs_OUTPUTS",
-				Value: v1beta1.ParamValue{
+				Value: objects.DataType{
 					ObjectVal: map[string]string{
 						"uri":    "gcr.io/foo/bar",
 						"digest": digest3,
@@ -623,7 +623,7 @@ func TestValidateResults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := isStructuredResult(tt.obj, tt.categoryMarker)
+			got, err := isStructuredResult(&tt.obj, tt.categoryMarker)
 			if got != tt.wantResult {
 				t.Errorf("Validation result is not as the expected: got %v and wanted %v", got, tt.wantResult)
 			}

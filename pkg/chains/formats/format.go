@@ -36,7 +36,7 @@ const (
 )
 
 var (
-	IntotoAttestationSet = map[config.PayloadType]struct{}{PayloadTypeInTotoIte6: {}, PayloadTypeSlsav1: {}}
+	IntotoAttestationSet = map[config.PayloadType]struct{}{PayloadTypeInTotoIte6: {}, PayloadTypeSlsav1: {}, PayloadTypeSlsav2: {}}
 	payloaderMap         = map[config.PayloadType]PayloaderInit{}
 )
 

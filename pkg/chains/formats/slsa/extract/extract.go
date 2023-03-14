@@ -29,6 +29,7 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // SubjectDigests returns software artifacts produced from the TaskRun/PipelineRun object
@@ -139,4 +140,56 @@ func RetrieveAllArtifactURIs(obj objects.TektonObject, logger *zap.SugaredLogger
 		}
 	}
 	return result
+}
+
+// Type hinting extraction
+// For taskrun: extract artifacts from taskrun results
+func ReimplSubjectDigests(u *unstructured.Unstructured, logger *zap.SugaredLogger) ([]intoto.Subject, error) {
+	var subjects []intoto.Subject
+
+	// old approach: string result `IMAGE_URL` & `IMAGE_DIGEST`
+	imgs := artifacts.ReimplExtractOCIImagesFromResults(u, logger)
+	for _, i := range imgs {
+		if d, ok := i.(name.Digest); ok {
+			subjects = append(subjects, intoto.Subject{
+				Name: d.Repository.Name(),
+				Digest: slsa.DigestSet{
+					"sha256": strings.TrimPrefix(d.DigestStr(), "sha256:"),
+				},
+			})
+		}
+	}
+
+	// old approach: string result `ARTIFACT_URI` & `ARTIFACT_DIGEST`
+	sts := artifacts.ReimplExtractSignableTargetFromResults(u, logger)
+	for _, obj := range sts {
+		splits := strings.Split(obj.Digest, ":")
+		if len(splits) != 2 {
+			logger.Errorf("Digest %s should be in the format of: algorthm:abc", obj.Digest)
+			continue
+		}
+		subjects = append(subjects, intoto.Subject{
+			Name: obj.URI,
+			Digest: slsa.DigestSet{
+				splits[0]: splits[1],
+			},
+		})
+	}
+
+	// new approach: object result `*ARTIFACT_INPUTS` / `*ARTIFACT_OUTPUTS` (with keys named uri and digest)
+	ssts := artifacts.ReimplExtractStructuredTargetFromResults(u, artifacts.ArtifactsOutputsResultName, logger)
+	for _, s := range ssts {
+		splits := strings.Split(s.Digest, ":")
+		alg := splits[0]
+		digest := splits[1]
+		subjects = append(subjects, intoto.Subject{
+			Name: s.URI,
+			Digest: slsa.DigestSet{
+				alg: digest,
+			},
+		})
+	}
+
+	return subjects, nil
+
 }

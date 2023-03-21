@@ -17,7 +17,7 @@ import (
 	"context"
 
 	signing "github.com/tektoncd/chains/pkg/chains"
-	"github.com/tektoncd/chains/pkg/chains/objects"
+	"github.com/tektoncd/chains/pkg/internal/objectcreation"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	taskrunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1beta1/taskrun"
@@ -63,7 +63,10 @@ func (r *Reconciler) FinalizeKind(ctx context.Context, tr *v1beta1.TaskRun) pkgr
 	// if err != nil {
 	// 	return err
 	// }
-	obj := objects.NewTaskRunObject(tr)
+	obj, err := objectcreation.NewTaskRunObject(ctx, r.DynamicClient, tr)
+	if err != nil {
+		return err
+	}
 
 	// Check to see if it has already been signed.
 	if signing.Reconciled(ctx, r.Pipelineclientset, obj) {

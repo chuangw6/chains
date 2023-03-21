@@ -16,20 +16,15 @@ package taskrun
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
-	"github.com/tektoncd/chains/pkg/chains/formats/slsa/attest"
 	"github.com/tektoncd/chains/pkg/chains/formats/slsa/extract"
 	"github.com/tektoncd/chains/pkg/chains/formats/slsa/internal/material"
 	"github.com/tektoncd/chains/pkg/chains/objects"
 	"github.com/tektoncd/chains/pkg/config"
-	"github.com/tektoncd/chains/pkg/internal/dynamicclient"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"knative.dev/pkg/logging"
 )
 
@@ -42,16 +37,16 @@ type BuildConfig struct {
 	TaskRunResults interface{} `json:"taskRunResults"`
 }
 
-func GenerateAttestation(builderID string, payloadType config.PayloadType, tro *objects.TaskRunObject, ctx context.Context) (interface{}, error) {
-	// the following 8 lines will not be needed assuming the tro is changed to be based on the unstructured object
-	dc, err := dynamicclient.NewClient()
-	if err != nil {
-		return nil, err
-	}
-	unstructuredTr, err := dc.Resource(objects.TaskrunResource).Namespace(tro.Namespace).Get(ctx, tro.Name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("not able to find the taskrun: %v", err)
-	}
+func GenerateAttestation(builderID string, payloadType config.PayloadType, unstructuredTr *objects.TaskRunObject, ctx context.Context) (interface{}, error) {
+	// // the following 8 lines will not be needed assuming the tro is changed to be based on the unstructured object
+	// dc, err := dynamicclient.NewClient()
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// unstructuredTr, err := dc.Resource(objects.TaskrunResource).Namespace(tro.Namespace).Get(ctx, tro.Name, metav1.GetOptions{})
+	// if err != nil {
+	// 	return nil, fmt.Errorf("not able to find the taskrun: %v", err)
+	// }
 
 	// now, we need to access the specific fields of TaskRun through the unstructure object
 	// 1. TaskRun.Status.TaskSpec for [predicate.BuildConfig]
@@ -74,7 +69,7 @@ func GenerateAttestation(builderID string, payloadType config.PayloadType, tro *
 	}
 
 	// 3. for [predicate.Invocation]
-	invo, err := reimplInvocation(unstructuredTr)
+	invo, err := reimplInvocation(unstructuredTr.Unstructured)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +77,7 @@ func GenerateAttestation(builderID string, payloadType config.PayloadType, tro *
 	// 4. for subjects
 	logger := logging.FromContext(ctx)
 	// subjects := extract.SubjectDigests(tro, logger)
-	subjects, err := extract.ReimplSubjectDigests(unstructuredTr, logger)
+	subjects, err := extract.ReimplSubjectDigests(unstructuredTr.Unstructured, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -92,13 +87,13 @@ func GenerateAttestation(builderID string, payloadType config.PayloadType, tro *
 	// if err != nil {
 	// 	return nil, err
 	// }
-	mat, err := material.ReimplMaterials(unstructuredTr, logger)
+	mat, err := material.ReimplMaterials(unstructuredTr.Unstructured, logger)
 	if err != nil {
 		return nil, err
 	}
 
 	// 6. for metadata
-	metadata, err := reimplMetadata(unstructuredTr)
+	metadata, err := reimplMetadata(unstructuredTr.Unstructured)
 
 	att := intoto.ProvenanceStatement{
 		StatementHeader: intoto.StatementHeader{
@@ -126,25 +121,25 @@ func GenerateAttestation(builderID string, payloadType config.PayloadType, tro *
 	return att, nil
 }
 
-// invocation describes the event that kicked off the build
-// we currently don't set ConfigSource because we don't know
-// which material the Task definition came from
-func invocation(tro *objects.TaskRunObject) slsa.ProvenanceInvocation {
-	i := slsa.ProvenanceInvocation{}
-	if p := tro.Status.Provenance; p != nil && p.ConfigSource != nil {
-		i.ConfigSource = slsa.ConfigSource{
-			URI:        p.ConfigSource.URI,
-			Digest:     p.ConfigSource.Digest,
-			EntryPoint: p.ConfigSource.EntryPoint,
-		}
-	}
-	i.Parameters = invocationParams(tro)
-	env := invocationEnv(tro)
-	if len(env) > 0 {
-		i.Environment = env
-	}
-	return i
-}
+// // invocation describes the event that kicked off the build
+// // we currently don't set ConfigSource because we don't know
+// // which material the Task definition came from
+// func invocation(tro *objects.TaskRunObject) slsa.ProvenanceInvocation {
+// 	i := slsa.ProvenanceInvocation{}
+// 	if p := tro.Status.Provenance; p != nil && p.ConfigSource != nil {
+// 		i.ConfigSource = slsa.ConfigSource{
+// 			URI:        p.ConfigSource.URI,
+// 			Digest:     p.ConfigSource.Digest,
+// 			EntryPoint: p.ConfigSource.EntryPoint,
+// 		}
+// 	}
+// 	i.Parameters = invocationParams(tro)
+// 	env := invocationEnv(tro)
+// 	if len(env) > 0 {
+// 		i.Environment = env
+// 	}
+// 	return i
+// }
 
 func reimplInvocation(u *unstructured.Unstructured) (slsa.ProvenanceInvocation, error) {
 	i := slsa.ProvenanceInvocation{}
@@ -189,16 +184,16 @@ func reimplInvocation(u *unstructured.Unstructured) (slsa.ProvenanceInvocation, 
 	return i, nil
 }
 
-// invocationEnv adds the tekton feature flags that were enabled
-// for the taskrun. In the future, we can populate versioning information
-// here as well.
-func invocationEnv(tro *objects.TaskRunObject) map[string]any {
-	var iEnv map[string]any = make(map[string]any)
-	if tro.Status.Provenance != nil && tro.Status.Provenance.FeatureFlags != nil {
-		iEnv["tekton-pipelines-feature-flags"] = tro.Status.Provenance.FeatureFlags
-	}
-	return iEnv
-}
+// // invocationEnv adds the tekton feature flags that were enabled
+// // for the taskrun. In the future, we can populate versioning information
+// // here as well.
+// func invocationEnv(tro *objects.TaskRunObject) map[string]any {
+// 	var iEnv map[string]any = make(map[string]any)
+// 	if tro.Status.Provenance != nil && tro.Status.Provenance.FeatureFlags != nil {
+// 		iEnv["tekton-pipelines-feature-flags"] = tro.Status.Provenance.FeatureFlags
+// 	}
+// 	return iEnv
+// }
 
 func reimplInvocationEnv(u *unstructured.Unstructured) (map[string]any, error) {
 	iEnv := map[string]any{}
@@ -213,20 +208,20 @@ func reimplInvocationEnv(u *unstructured.Unstructured) (map[string]any, error) {
 	return iEnv, nil
 }
 
-// invocationParams adds all fields from the task run object except
-// TaskRef or TaskSpec since they are in the ConfigSource or buildConfig.
-func invocationParams(tro *objects.TaskRunObject) map[string]any {
-	var iParams map[string]any = make(map[string]any)
-	skipFields := sets.NewString("TaskRef", "TaskSpec")
-	v := reflect.ValueOf(tro.Spec)
-	for i := 0; i < v.NumField(); i++ {
-		fieldName := v.Type().Field(i).Name
-		if !skipFields.Has(v.Type().Field(i).Name) {
-			iParams[fieldName] = v.Field(i).Interface()
-		}
-	}
-	return iParams
-}
+// // invocationParams adds all fields from the task run object except
+// // TaskRef or TaskSpec since they are in the ConfigSource or buildConfig.
+// func invocationParams(tro *objects.TaskRunObject) map[string]any {
+// 	var iParams map[string]any = make(map[string]any)
+// 	skipFields := sets.NewString("TaskRef", "TaskSpec")
+// 	v := reflect.ValueOf(tro.Spec)
+// 	for i := 0; i < v.NumField(); i++ {
+// 		fieldName := v.Type().Field(i).Name
+// 		if !skipFields.Has(v.Type().Field(i).Name) {
+// 			iParams[fieldName] = v.Field(i).Interface()
+// 		}
+// 	}
+// 	return iParams
+// }
 
 func reimplInvocationParams(u *unstructured.Unstructured) (map[string]any, error) {
 	trSpec, found, err := unstructured.NestedMap(u.UnstructuredContent(), "spec")
@@ -267,7 +262,7 @@ func reimplMetadata(u *unstructured.Unstructured) (*slsa.ProvenanceMetadata, err
 	}
 
 	for label, value := range u.GetLabels() {
-		if label == attest.ChainsReproducibleAnnotation && value == "true" {
+		if label == "chains.tekton.dev/reproducible" && value == "true" {
 			m.Reproducible = true
 		}
 	}

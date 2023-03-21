@@ -17,130 +17,128 @@ limitations under the License.
 package extract
 
 import (
-	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	"github.com/tektoncd/chains/pkg/artifacts"
-	"github.com/tektoncd/chains/pkg/chains/objects"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	"github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
+
+	// "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	// "github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// SubjectDigests returns software artifacts produced from the TaskRun/PipelineRun object
-// in the form of standard subject field of intoto statement.
-// The type hinting fields expected in results help identify the generated software artifacts.
-// Valid type hinting fields must:
-//   - have suffix `IMAGE_URL` & `IMAGE_DIGEST` or `ARTIFACT_URI` & `ARTIFACT_DIGEST` pair.
-//   - the `*_DIGEST` field must be in the format of "<algorithm>:<actual-sha>" where the algorithm must be "sha256" and actual sha must be valid per https://github.com/opencontainers/image-spec/blob/main/descriptor.md#sha-256.
-//   - the `*_URL` or `*_URI` fields cannot be empty.
-func SubjectDigests(obj objects.TektonObject, logger *zap.SugaredLogger) []intoto.Subject {
-	var subjects []intoto.Subject
+// // SubjectDigests returns software artifacts produced from the TaskRun/PipelineRun object
+// // in the form of standard subject field of intoto statement.
+// // The type hinting fields expected in results help identify the generated software artifacts.
+// // Valid type hinting fields must:
+// //   - have suffix `IMAGE_URL` & `IMAGE_DIGEST` or `ARTIFACT_URI` & `ARTIFACT_DIGEST` pair.
+// //   - the `*_DIGEST` field must be in the format of "<algorithm>:<actual-sha>" where the algorithm must be "sha256" and actual sha must be valid per https://github.com/opencontainers/image-spec/blob/main/descriptor.md#sha-256.
+// //   - the `*_URL` or `*_URI` fields cannot be empty.
+// func SubjectDigests(obj objects.TektonObject, logger *zap.SugaredLogger) []intoto.Subject {
+// 	var subjects []intoto.Subject
 
-	imgs := artifacts.ExtractOCIImagesFromResults(obj, logger)
-	for _, i := range imgs {
-		if d, ok := i.(name.Digest); ok {
-			subjects = append(subjects, intoto.Subject{
-				Name: d.Repository.Name(),
-				Digest: slsa.DigestSet{
-					"sha256": strings.TrimPrefix(d.DigestStr(), "sha256:"),
-				},
-			})
-		}
-	}
+// 	imgs := artifacts.ExtractOCIImagesFromResults(obj, logger)
+// 	for _, i := range imgs {
+// 		if d, ok := i.(name.Digest); ok {
+// 			subjects = append(subjects, intoto.Subject{
+// 				Name: d.Repository.Name(),
+// 				Digest: slsa.DigestSet{
+// 					"sha256": strings.TrimPrefix(d.DigestStr(), "sha256:"),
+// 				},
+// 			})
+// 		}
+// 	}
 
-	sts := artifacts.ExtractSignableTargetFromResults(obj, logger)
-	for _, obj := range sts {
-		splits := strings.Split(obj.Digest, ":")
-		if len(splits) != 2 {
-			logger.Errorf("Digest %s should be in the format of: algorthm:abc", obj.Digest)
-			continue
-		}
-		subjects = append(subjects, intoto.Subject{
-			Name: obj.URI,
-			Digest: slsa.DigestSet{
-				splits[0]: splits[1],
-			},
-		})
-	}
+// 	sts := artifacts.ExtractSignableTargetFromResults(obj, logger)
+// 	for _, obj := range sts {
+// 		splits := strings.Split(obj.Digest, ":")
+// 		if len(splits) != 2 {
+// 			logger.Errorf("Digest %s should be in the format of: algorthm:abc", obj.Digest)
+// 			continue
+// 		}
+// 		subjects = append(subjects, intoto.Subject{
+// 			Name: obj.URI,
+// 			Digest: slsa.DigestSet{
+// 				splits[0]: splits[1],
+// 			},
+// 		})
+// 	}
 
-	ssts := artifacts.ExtractStructuredTargetFromResults(obj, artifacts.ArtifactsOutputsResultName, logger)
-	for _, s := range ssts {
-		splits := strings.Split(s.Digest, ":")
-		alg := splits[0]
-		digest := splits[1]
-		subjects = append(subjects, intoto.Subject{
-			Name: s.URI,
-			Digest: slsa.DigestSet{
-				alg: digest,
-			},
-		})
-	}
+// 	ssts := artifacts.ExtractStructuredTargetFromResults(obj, artifacts.ArtifactsOutputsResultName, logger)
+// 	for _, s := range ssts {
+// 		splits := strings.Split(s.Digest, ":")
+// 		alg := splits[0]
+// 		digest := splits[1]
+// 		subjects = append(subjects, intoto.Subject{
+// 			Name: s.URI,
+// 			Digest: slsa.DigestSet{
+// 				alg: digest,
+// 			},
+// 		})
+// 	}
 
-	// Check if object is a Taskrun, if so search for images used in PipelineResources
-	// Otherwise object is a PipelineRun, where Pipelineresources are not relevant.
-	// PipelineResources have been deprecated so their support has been left out of
-	// the POC for TEP-84
-	// More info: https://tekton.dev/docs/pipelines/resources/
-	tr, ok := obj.GetObject().(*v1beta1.TaskRun)
-	if !ok || tr.Spec.Resources == nil {
-		return subjects
-	}
+// 	// Check if object is a Taskrun, if so search for images used in PipelineResources
+// 	// Otherwise object is a PipelineRun, where Pipelineresources are not relevant.
+// 	// PipelineResources have been deprecated so their support has been left out of
+// 	// the POC for TEP-84
+// 	// More info: https://tekton.dev/docs/pipelines/resources/
+// 	tr, ok := obj.GetObject().(*v1beta1.TaskRun)
+// 	if !ok || tr.Spec.Resources == nil {
+// 		return subjects
+// 	}
 
-	// go through resourcesResult
-	for _, output := range tr.Spec.Resources.Outputs {
-		name := output.Name
-		if output.PipelineResourceBinding.ResourceSpec == nil {
-			continue
-		}
-		// similarly, we could do this for other pipeline resources or whatever thing replaces them
-		if output.PipelineResourceBinding.ResourceSpec.Type == v1alpha1.PipelineResourceTypeImage {
-			// get the url and digest, and save as a subject
-			var url, digest string
-			for _, s := range tr.Status.ResourcesResult {
-				if s.ResourceName == name {
-					if s.Key == "url" {
-						url = s.Value
-					}
-					if s.Key == "digest" {
-						digest = s.Value
-					}
-				}
-			}
-			subjects = append(subjects, intoto.Subject{
-				Name: url,
-				Digest: slsa.DigestSet{
-					"sha256": strings.TrimPrefix(digest, "sha256:"),
-				},
-			})
-		}
-	}
-	sort.Slice(subjects, func(i, j int) bool {
-		return subjects[i].Name <= subjects[j].Name
-	})
-	return subjects
-}
+// 	// go through resourcesResult
+// 	for _, output := range tr.Spec.Resources.Outputs {
+// 		name := output.Name
+// 		if output.PipelineResourceBinding.ResourceSpec == nil {
+// 			continue
+// 		}
+// 		// similarly, we could do this for other pipeline resources or whatever thing replaces them
+// 		if output.PipelineResourceBinding.ResourceSpec.Type == v1alpha1.PipelineResourceTypeImage {
+// 			// get the url and digest, and save as a subject
+// 			var url, digest string
+// 			for _, s := range tr.Status.ResourcesResult {
+// 				if s.ResourceName == name {
+// 					if s.Key == "url" {
+// 						url = s.Value
+// 					}
+// 					if s.Key == "digest" {
+// 						digest = s.Value
+// 					}
+// 				}
+// 			}
+// 			subjects = append(subjects, intoto.Subject{
+// 				Name: url,
+// 				Digest: slsa.DigestSet{
+// 					"sha256": strings.TrimPrefix(digest, "sha256:"),
+// 				},
+// 			})
+// 		}
+// 	}
+// 	sort.Slice(subjects, func(i, j int) bool {
+// 		return subjects[i].Name <= subjects[j].Name
+// 	})
+// 	return subjects
+// }
 
-// RetrieveAllArtifactURIs returns all the URIs of the software artifacts produced from the run object.
-// - It first extracts intoto subjects from run object results and converts the subjects
-// to a slice of string URIs in the format of "NAME" + "@" + "ALGORITHM" + ":" + "DIGEST".
-// - If no subjects could be extracted from results, then an empty slice is returned.
-func RetrieveAllArtifactURIs(obj objects.TektonObject, logger *zap.SugaredLogger) []string {
-	result := []string{}
-	subjects := SubjectDigests(obj, logger)
+// // RetrieveAllArtifactURIs returns all the URIs of the software artifacts produced from the run object.
+// // - It first extracts intoto subjects from run object results and converts the subjects
+// // to a slice of string URIs in the format of "NAME" + "@" + "ALGORITHM" + ":" + "DIGEST".
+// // - If no subjects could be extracted from results, then an empty slice is returned.
+// func RetrieveAllArtifactURIs(obj objects.TektonObject, logger *zap.SugaredLogger) []string {
+// 	result := []string{}
+// 	subjects := SubjectDigests(obj, logger)
 
-	for _, s := range subjects {
-		for algo, digest := range s.Digest {
-			result = append(result, fmt.Sprintf("%s@%s:%s", s.Name, algo, digest))
-		}
-	}
-	return result
-}
+// 	for _, s := range subjects {
+// 		for algo, digest := range s.Digest {
+// 			result = append(result, fmt.Sprintf("%s@%s:%s", s.Name, algo, digest))
+// 		}
+// 	}
+// 	return result
+// }
 
 // Type hinting extraction
 // For taskrun: extract artifacts from taskrun results
